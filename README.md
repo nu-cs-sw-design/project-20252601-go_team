@@ -1,7 +1,7 @@
 # Project: NAME
 
 ## Contributors
-NAME, NAME, NAME
+Keigo Healy, Tahasin Shadat
 
 ## Dependencies
 - LANGUAGE AND VERSION
