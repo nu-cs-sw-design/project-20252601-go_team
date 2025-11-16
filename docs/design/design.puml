@@ -1,2 +1,331 @@
 @startuml
+
+package Model {
+
+    +enum Side {
+        BUY
+        SELL
+    }
+
+    +enum TimeInForce {
+        GTC ' Good Til Canceled
+        IOC ' Immediate Or Cancel
+        FOK ' Fill Or Kill
+    }
+
+    ' This interface represents any asset that can be traded like Stocs or Crypto
+    +interface TradableAsset {
+        +getTicker(): String
+        +getName(): String
+        +getDescription(): String
+    }
+
+    +class Stock {
+        -ticker: String
+        -name: String
+        -description: String
+        +getTicker(): String
+        +getName(): String
+        +getDescription(): String
+    }
+
+    +class Crypto {
+        -ticker: String
+        -name: String
+        -description: String
+        +getTicker(): String
+        +getName(): String
+        +getDescription(): String
+    }
+
+    Stock ..|> TradableAsset
+    Crypto ..|> TradableAsset
+    
+
+
+    ' Order & Trade Data Structures
+    +abstract class Order {
+        -orderId: String
+        -asset: TradableAsset
+        -side: Side
+        -quantity: Decimal
+        -remainingQuantity: Decimal
+        -timestamp: long
+        -tif: TimeInForce
+        +getOrderId(): String
+        +getRemainingQuantity(): Decimal
+        +isFilled(): boolean
+        +fill(qty: Decimal): void
+        +getTif(): TimeInForce
+    }
+    note left of Order
+        Tis holds all common properties for all orders.
+    end note
+
+    ' A concrete order type that specifies a maximum buy price or minimum sell price
+    class LimitOrder {
+        -price: Decimal
+        +getPrice(): Decimal
+    }
+
+    ' A concrete order type to be executed immediately at the best available market prices
+    class MarketOrder {
+    }
+
+    class Trade {
+        -tradeId: String
+        -asset: TradableAsset
+        -price: Decimal
+        -quantity: Decimal
+        -takerOrderId: String
+        -makerOrderId: String
+        -timestamp: long
+    }
+
+
+
+    ' Price Level & Order Book
+    class PriceLevel {
+        -price: Decimal
+        -totalVolume: Decimal
+        -orders: Deque<LimitOrder>
+        +addOrder(order: LimitOrder): void
+        +removeOrder(order: LimitOrder): void
+        +match(takerOrder: Order): List<Trade>
+        +getTotalVolume(): Decimal
+        +getPrice(): Decimal
+    }
+    note right of PriceLevel
+        The queue of orders specifically holds LimitOrders, 
+        as market orders are not held in the book.
+    end note
+
+    class OrderBook {
+        -asset: TradableAsset
+        -bids: SortedMap<Decimal, PriceLevel>
+        -asks: SortedMap<Decimal, PriceLevel>
+
+        -ordersById: Map<String, Order>
+        -observers: List<OrderBookObserver>
+        -tradeHistory: List<Trade>
+
+        +addOrder(order: Order): List<Trade>
+        -matchOrder(order: Order): List<Trade>
+        +cancelOrder(orderId: String): boolean
+        +modifyOrder(orderId: String, newPrice: Decimal, newQty: Decimal): boolean
+        
+        +getBestBid(): PriceLevelInfo
+        +getBestAsk(): PriceLevelInfo
+        
+        +getDepth(levels: int): OrderBookDepth
+        +getOrder(orderId: String): Order
+        +getOpenOrders(side: Side): List<Order>
+        +getRecentTrades(limit: int): List<Trade>
+        
+        +getSnapshot(): OrderBookSnapshot
+        +reset(): void
+        
+        +addObserver(observer: OrderBookObserver): void
+        +removeObserver(observer: OrderBookObserver): void
+        
+        -notifyBookUpdate(snapshot: OrderBookSnapshot): void
+        -notifyNewTrade(trade: Trade): void
+    }
+    note left of OrderBook
+        The addOrder method takes the abstract Order type. 
+        It will check the order type and handle its TIF policy.
+    end note
+    note left of OrderBook::modifyOrder
+        This method only applies to GTC LimitOrders
+        because they are the only ones that can be modified.
+    end note
+
+
+
+    ' DTOs for Read-Only Data
+    class PriceLevelInfo {
+        +price: Decimal
+        +totalVolume: Decimal
+    }
+    class TopOfBook {
+        +bestBid: PriceLevelInfo
+        +bestAsk: PriceLevelInfo
+        +spread: Decimal
+    }
+    class OrderBookDepth {
+        +bids: List<PriceLevelInfo>
+        +asks: List<PriceLevelInfo>
+    }
+    class OrderBookSnapshot {
+        +symbol: String
+        +timestamp: long
+        +bids: List<PriceLevelInfo>
+        +asks: List<PriceLevelInfo>
+        +recentTrades: List<Trade>
+    }
+
+
+
+    ' Observer Interface for View Updates
+    interface OrderBookObserver {
+        +onOrderBookUpdate(snapshot: OrderBookSnapshot): void
+        +onNewTrade(trade: Trade): void
+    }
+
+
+
+    ' Simulation Event Handling
+    +interface MarketEvent {
+        +getTimestamp(): long
+        +getSymbol(): String
+    }
+    +class AddOrderEvent {
+        +orderInfo: Order
+    }
+    +class CancelOrderEvent {
+        +orderId: String
+    }
+    +class ModifyOrderEvent {
+        +orderId: String
+        +newPrice: Decimal
+        +newQuantity: Decimal
+    }
+    +class EventLoader {
+        +loadEvents(path: String): List<MarketEvent>
+    }
+
+
+
+    ' Data Exporting
+    +interface DataExporter {
+        +exportTrades(trades: List<Trade>, path: String): void
+        +exportBookHistory(history: List<OrderBookSnapshot>, path: String): void
+    }
+    +class CsvDataExporter {
+        +exportTrades(trades: List<Trade>, path: String): void
+        +exportBookHistory(history: List<OrderBookSnapshot>, path: String): void
+    }
+
+
+
+    ' Model Relationships
+    Stock ..|> TradableAsset
+    Crypto ..|> TradableAsset
+
+    LimitOrder --|> Order
+    MarketOrder --|> Order
+
+    OrderBook --> TradableAsset
+    OrderBook --> PriceLevel
+    OrderBook --> OrderBookObserver
+    OrderBook ..> Order
+    OrderBook ..> LimitOrder
+    OrderBook ..> MarketOrder
+    OrderBook ..> Trade
+    OrderBook ..> OrderBookDepth
+    OrderBook ..> TopOfBook
+    OrderBook ..> PriceLevelInfo
+    OrderBook ..> OrderBookSnapshot
+    OrderBook ..> Side
+
+    PriceLevel --> LimitOrder
+    PriceLevel ..> Order
+
+    Order --> TradableAsset
+    Order ..> Side
+    Order ..> TimeInForce
+
+    AddOrderEvent ..|> MarketEvent
+    AddOrderEvent ..> Order
+    CancelOrderEvent ..|> MarketEvent
+    ModifyOrderEvent ..|> MarketEvent
+
+    EventLoader ..> MarketEvent
+
+    CsvDataExporter ..|> DataExporter
+    DataExporter ..> Trade
+    DataExporter ..> OrderBookSnapshot
+}
+
+package Controller {
+
+    class SimulationSession {
+        -sessionId: String
+        -events: List<MarketEvent>
+        -currentEventIndex: int
+        -targetBook: OrderBook
+
+        +step(n_events: int): void
+        +runToEnd(): void
+    }
+
+
+    class TradingSimulator {
+        -orderBooks: Map<String, OrderBook>
+        -simulations: Map<String, SimulationSession>
+        -eventLoader: EventLoader
+        -dataExporter: DataExporter
+        
+        ' TODO: Add in API Calls for OrderBook
+    }
+
+    ' --- Controller Relationships ---
+    SimulationSession --> OrderBook
+    SimulationSession ..> MarketEvent
+
+    TradingSimulator --> OrderBook
+    TradingSimulator --> SimulationSession
+    TradingSimulator --> EventLoader
+    TradingSimulator --> DataExporter 
+    TradingSimulator ..> TradableAsset
+    TradingSimulator ..> Side
+    TradingSimulator ..> TimeInForce
+    TradingSimulator ..> LimitOrder
+    TradingSimulator ..> MarketOrder
+    TradingSimulator ..> Trade
+    TradingSimulator ..> PriceLevelInfo
+    TradingSimulator ..> TopOfBook
+    TradingSimulator ..> OrderBookDepth
+    TradingSimulator ..> Order
+    TradingSimulator ..> OrderBookSnapshot
+
+}
+
+' TODO: Complete View
+package View {
+    class MainView {
+        
+    }
+}
+
 @enduml
+
+
+
+
+
+/'
+
+package View {
+    class Main {
+
+    }
+}
+
+package Controller {
+    +class Retriever {
+        
+    }
+
+    +class Interactor {
+        +class placeOrder(): void 
+        +class 
+    }
+}
+
+Model --> View
+Controller --> Model
+Controller --> View
+View --> Controller
+
+'/
