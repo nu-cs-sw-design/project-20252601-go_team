@@ -1,10 +1,10 @@
-# Project: NAME
+# Project: Multilevel Limit Orderbook
 
 ## Contributors
 Keigo Healy, Tahasin Shadat
 
 ## Dependencies
-- LANGUAGE AND VERSION
+- Rust
 - EXTERNAL LIBRARIES
 - ETC
 
