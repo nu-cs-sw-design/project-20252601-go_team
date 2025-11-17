@@ -292,6 +292,8 @@ package Controller {
     TradingSimulator ..> OrderBookSnapshot
 }
 package View {
+    
+    ' Main application view that orchestrates all UI components
     class MainView {
         -controller: TradingSimulator
         -user: User
