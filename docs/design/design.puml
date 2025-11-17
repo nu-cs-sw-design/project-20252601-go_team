@@ -266,7 +266,44 @@ package Controller {
         -eventLoader: EventLoader
         -dataExporter: DataExporter
         
-        ' TODO: Add in API Calls for OrderBook
+        ' Order Management API
+        +placeOrder(symbol: String, order: Order): List<Trade>
+        +cancelOrder(symbol: String, orderId: String): boolean
+        +modifyOrder(symbol: String, orderId: String, newPrice: Decimal, newQty: Decimal): boolean
+        
+        ' Order Book Query API
+        +getOrderBook(symbol: String): OrderBook
+        +getBestBid(symbol: String): PriceLevelInfo
+        +getBestAsk(symbol: String): PriceLevelInfo
+        +getTopOfBook(symbol: String): TopOfBook
+        +getDepth(symbol: String, levels: int): OrderBookDepth
+        +getSnapshot(symbol: String): OrderBookSnapshot
+        
+        ' Order Query API
+        +getOrder(symbol: String, orderId: String): Order
+        +getOpenOrders(symbol: String, side: Side): List<Order>
+        
+        ' Trade History API
+        +getRecentTrades(symbol: String, limit: int): List<Trade>
+        +getAllTrades(symbol: String): List<Trade>
+        
+        ' Observer Management API
+        +addOrderBookObserver(symbol: String, observer: OrderBookObserver): void
+        +removeOrderBookObserver(symbol: String, observer: OrderBookObserver): void
+        
+        ' OrderBook Lifecycle API
+        +createOrderBook(asset: TradableAsset): OrderBook
+        +getAvailableSymbols(): List<String>
+        +resetOrderBook(symbol: String): void
+        
+        ' Simulation API
+        +createSimulation(sessionId: String, symbol: String, eventsFile: String): SimulationSession
+        +getSimulation(sessionId: String): SimulationSession
+        +removeSimulation(sessionId: String): void
+        
+        ' Data Export API
+        +exportTrades(symbol: String, path: String): void
+        +exportBookHistory(symbol: String, path: String): void
     }
 
     ' --- Controller Relationships ---
