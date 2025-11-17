@@ -291,11 +291,165 @@ package Controller {
 
 }
 
-' TODO: Complete View
 package View {
+    
+    ' Main application view that orchestrates all UI components
     class MainView {
+        -simulator: TradingSimulator
+        -orderBookView: OrderBookView
+        -tradeHistoryView: TradeHistoryView
+        -controlPanel: ControlPanel
+        -chartView: ChartView
         
+        +initialize(): void
+        +render(): void
+        +update(): void
+        +selectAsset(symbol: String): void
     }
+    note right of MainView
+        MainView is the main entry point for the UI.
+        It coordinates all view components and connects
+        them to the TradingSimulator controller.
+    end note
+    
+    ' View component for displaying order book data
+    class OrderBookView {
+        -orderBook: OrderBook
+        -currentSnapshot: OrderBookSnapshot
+        -depthLevels: int
+        
+        +onOrderBookUpdate(snapshot: OrderBookSnapshot): void
+        +onNewTrade(trade: Trade): void
+        +renderBids(bids: List<PriceLevelInfo>): void
+        +renderAsks(asks: List<PriceLevelInfo>): void
+        +renderSpread(): void
+        +setDepthLevels(levels: int): void
+    }
+    note right of OrderBookView
+        Implements OrderBookObserver to receive
+        real-time updates from the OrderBook.
+        Displays current bids, asks, and spread.
+    end note
+    
+    ' View component for displaying trade history
+    class TradeHistoryView {
+        -trades: List<Trade>
+        -maxDisplayCount: int
+        
+        +addTrade(trade: Trade): void
+        +clearTrades(): void
+        +renderTrades(): void
+        +filterByAsset(symbol: String): void
+        +setMaxDisplayCount(count: int): void
+    }
+    note left of TradeHistoryView
+        Displays recent trade executions with
+        timestamp, price, quantity, and sides.
+    end note
+    
+    ' Control panel for user interactions
+    class ControlPanel {
+        -simulator: TradingSimulator
+        -selectedAsset: TradableAsset
+        -selectedSession: SimulationSession
+        
+        +onLoadEventsClick(filePath: String): void
+        +onStepSimulationClick(steps: int): void
+        +onRunToEndClick(): void
+        +onResetClick(): void
+        +onPlaceOrderClick(order: Order): void
+        +onCancelOrderClick(orderId: String): void
+        +onExportDataClick(exportPath: String): void
+        +renderControls(): void
+    }
+    note left of ControlPanel
+        Provides user interface controls for
+        simulation management and manual trading.
+    end note
+    
+    ' Visual chart for price and volume data
+    class ChartView {
+        -priceHistory: List<PricePoint>
+        -volumeHistory: List<VolumePoint>
+        -chartType: ChartType
+        
+        +updatePriceData(snapshot: OrderBookSnapshot): void
+        +updateVolumeData(snapshot: OrderBookSnapshot): void
+        +renderChart(): void
+        +setChartType(type: ChartType): void
+        +setTimeRange(start: long, end: long): void
+    }
+    note right of ChartView
+        Displays price and volume charts over time.
+        Supports multiple chart types (line, candlestick, etc).
+    end note
+    
+    ' Enum for different chart display types
+    +enum ChartType {
+        LINE
+        CANDLESTICK
+        BAR
+        AREA
+    }
+    
+    ' Data structure for price visualization
+    class PricePoint {
+        +timestamp: long
+        +price: Decimal
+        +volume: Decimal
+    }
+    
+    ' Data structure for volume visualization
+    class VolumePoint {
+        +timestamp: long
+        +volume: Decimal
+        +side: Side
+    }
+    
+    ' Status display for system information
+    class StatusBar {
+        -connectionStatus: String
+        -lastUpdateTime: long
+        -messageQueue: Queue<String>
+        
+        +updateStatus(message: String): void
+        +showError(error: String): void
+        +showInfo(info: String): void
+        +render(): void
+    }
+    note right of StatusBar
+        Displays system status, connection info,
+        and user notifications/messages.
+    end note
+    
+    ' --- View Relationships ---
+    MainView --> OrderBookView
+    MainView --> TradeHistoryView
+    MainView --> ControlPanel
+    MainView --> ChartView
+    MainView --> StatusBar
+    MainView --> TradingSimulator
+    
+    OrderBookView ..|> OrderBookObserver
+    OrderBookView --> OrderBook
+    OrderBookView ..> OrderBookSnapshot
+    OrderBookView ..> PriceLevelInfo
+    OrderBookView ..> Trade
+    
+    TradeHistoryView ..> Trade
+    TradeHistoryView ..> TradableAsset
+    
+    ControlPanel --> TradingSimulator
+    ControlPanel --> SimulationSession
+    ControlPanel ..> TradableAsset
+    ControlPanel ..> Order
+    
+    ChartView ..> OrderBookSnapshot
+    ChartView --> PricePoint
+    ChartView --> VolumePoint
+    ChartView ..> ChartType
+    
+    VolumePoint ..> Side
 }
 
 @enduml
