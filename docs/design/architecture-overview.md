@@ -71,6 +71,9 @@ This trading simulation system follows the **Model-View-Controller (MVC)** archi
 
 **Key Components**:
 - **TradingSimulator**: Main controller managing multiple OrderBooks and simulation sessions
+  - Provides comprehensive API for Order Management, OrderBook Queries, Trade History, Observer Management, and Data Export
+  - Acts as a facade delegating to appropriate OrderBook instances
+  - Supports multi-asset trading with symbol-based routing
 - **SimulationSession**: Executes market events step-by-step for a specific OrderBook
 - **EventLoader**: Loads market events from external sources
 - Integration with DataExporter for results
@@ -81,6 +84,7 @@ This trading simulation system follows the **Model-View-Controller (MVC)** archi
 - Coordination between Model and View
 - Session management
 - Data import/export coordination
+- Centralized API for all trading operations
 
 ### View Package
 **Purpose**: User interface and visualization
