@@ -259,17 +259,19 @@ package Controller {
         +runToEnd(): void
     }
 
+    class User {
+        +stocks: Map<Stock, PriceLevelInfo>
+        +cryptos: Map<Crypto, PriceLevelInfo>
+    }
+
 
     class TradingSimulator {
         -orderBooks: Map<String, OrderBook>
         -simulations: Map<String, SimulationSession>
         -eventLoader: EventLoader
         -dataExporter: DataExporter
-        
-        ' TODO: Add in API Calls for OrderBook
     }
 
-    ' --- Controller Relationships ---
     SimulationSession --> OrderBook
     SimulationSession ..> MarketEvent
 
@@ -288,44 +290,106 @@ package Controller {
     TradingSimulator ..> OrderBookDepth
     TradingSimulator ..> Order
     TradingSimulator ..> OrderBookSnapshot
-
 }
-
-' TODO: Complete View
 package View {
     class MainView {
-        
+        -controller: TradingSimulator
+        -user: User
+        -currentAsset: TradableAsset
+        -currentBook: OrderBook
+
+        +assetSelector: AssetSelector
+        +bestOrderDisplayer: BestOrderDisplayer
+        +depthGraph: Graph
+        +userVolumeDisplayer: UserVolumeDisplayer
+        +placeOrderPanel: PlaceOrderPanel
+
+        +init(controller: TradingSimulator, user: User): void
+        +onAssetSelected(asset: TradableAsset): void
+        -subscribeTo(asset: TradableAsset): void
+        -unsubscribe(): void
+        -refreshUserVolume(): void
+    }
+
+    class Button {
+        +label: String
+        +onClick(): void
+    }
+
+    class AssetSelector {
+        -availableAssets: List<TradableAsset>
+        +selectedAsset: TradableAsset
+        +selectButton: Button
+
+        +setAssets(assets: List<TradableAsset>): void
+        +changeAsset(newAsset: TradableAsset): void
+        +onAssetChanged(handler: (TradableAsset) -> void): void
+    }
+
+    class BestOrderDisplayer {
+        +num_displays: int
+        +topBids : List<PriceLevelInfo>
+        +topAsks : List<PriceLevelInfo>
+
+        +onOrderBookUpdate(snapshot: OrderBookSnapshot): void
+        +onNewTrade(trade: Trade): void
+    }
+
+    class Graph {
+        +bids: List<PriceLevelInfo>
+        +asks: List<PriceLevelInfo>
+
+        +updateBids(newBids: List<PriceLevelInfo>): void
+        +updateAsks(newAsks: List<PriceLevelInfo>): void
+        +onOrderBookUpdate(snapshot: OrderBookSnapshot): void
+        +onNewTrade(trade: Trade): void
+
+        +image: Image
+    }
+
+    class UserVolumeDisplayer {
+        +volume: Decimal
+        +updateVolume(asset: TradableAsset, user: Controller.User): void
+    }
+
+    class PlaceOrderPanel {
+        +asset: TradableAsset
+        +side: Side
+        +orderType: String
+        +quantity: Decimal
+        +price: Decimal
+        +tif: TimeInForce
+        +submitButton: Button
+
+        +setAsset(asset: TradableAsset): void
+        +onSubmit(): void
     }
 }
+
+' --- View Implements Model Observer for live updates ---
+View.BestOrderDisplayer ..|> Model.OrderBookObserver
+View.Graph ..|> Model.OrderBookObserver
+
+' --- View Dependencies ---
+View.AssetSelector --> Model.TradableAsset
+View.Graph --> Model.PriceLevelInfo
+View.UserVolumeDisplayer --> Model.TradableAsset
+View.PlaceOrderPanel ..> Controller.TradingSimulator
+View.PlaceOrderPanel ..> Model.Side
+View.PlaceOrderPanel ..> Model.TimeInForce
+View.PlaceOrderPanel ..> Model.LimitOrder
+View.PlaceOrderPanel ..> Model.MarketOrder
+View.PlaceOrderPanel --> View.Button
+
+' --- Wiring and Flow ---
+View.MainView --> View.AssetSelector
+View.MainView --> View.BestOrderDisplayer
+View.MainView --> View.Graph
+View.MainView --> View.UserVolumeDisplayer
+View.MainView --> View.PlaceOrderPanel
+View.MainView ..> Controller.TradingSimulator
+View.MainView ..> Controller.User
+View.MainView ..> Model.OrderBook
+View.MainView ..> Model.TradableAsset
 
 @enduml
-
-
-
-
-
-/'
-
-package View {
-    class Main {
-
-    }
-}
-
-package Controller {
-    +class Retriever {
-        
-    }
-
-    +class Interactor {
-        +class placeOrder(): void 
-        +class 
-    }
-}
-
-Model --> View
-Controller --> Model
-Controller --> View
-View --> Controller
-
-'/
