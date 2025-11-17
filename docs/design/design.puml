@@ -8,9 +8,9 @@ package Model {
     }
 
     +enum TimeInForce {
-        GTC ' Good Til Canceled
-        IOC ' Immediate Or Cancel
-        FOK ' Fill Or Kill
+        GTC 
+        IOC
+        FOK
     }
 
     ' This interface represents any asset that can be traded like Stocs or Crypto
