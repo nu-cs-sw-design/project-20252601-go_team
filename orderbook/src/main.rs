@@ -19,13 +19,25 @@ fn main() {
 
     human_id("Joel", 32, 180.6);
 
-    
-}
+    let x = {
+        let price = 5;
+        let qty = 10;
+        price * qty
+    };
 
-fn print() {
-    println!("hi");
+    println!("result is {}", add(x, x));
+
+    println!("bmi is {:.2}", calculate_bmi(74.23, 1.7673));
 }
 
 fn human_id(name: &str, age: u32, height: f32) {
     println!("My name is {}, I am {} years old, and my height is {}", name, age, height);
+}
+
+fn add(a: i32, b: i32) -> i32 {
+    a + b
+}
+
+fn calculate_bmi(weight_kg: f64, height_m: f64) -> f64 {
+    weight_kg / (height_m * height_m)
 }
