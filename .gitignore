@@ -255,3 +255,7 @@ gradle-app.setting
 # Cache of project
 .gradletasknamecache
 /.idea/
+
+# Rust
+orderbook/target/
+target/
