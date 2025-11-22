@@ -1,17 +1,22 @@
-use std::collections::HashMap;
+// #![allow(dead_code)]
+
+mod model;
+use model::{Side, TimeInForce, TradableAsset, Stock, Crypto};
 
 fn main() {
-    let mut scores = HashMap::new();
+    let aapl = Stock::new("AAPL", "Apple Inc.", "Big fruit company");
+    println!("Stock Ticker: {}", aapl.ticker());
+    println!("Stock Name: {}", aapl.name());
+    println!("Stock Description: {}", aapl.description());
 
-    let team = String::from("blue");
-    let score = 3;
+    let btc = Crypto::new("BTC", "Bitcoin", "Digital gold");
+    println!("Crypto Ticker: {}", btc.ticker());
+    println!("Crypto Name: {}", btc.name());
+    println!("Crypto Description: {}", btc.description());
 
-    scores.insert(team, score);
-    // scores.insert(score, team);
+    let buy_side = Side::BUY;
+    let order_tif = TimeInForce::GTC;
 
-    for (key, value) in &scores {
-        println!("{key}, {value}");
-    }
-
-    println!("done");
+    println!("Example Side: {:?}", buy_side);
+    println!("Example TimeInForce: {:?}", order_tif);
 }

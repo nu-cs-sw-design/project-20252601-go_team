@@ -1,1 +1,678 @@
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s
+   0.053176200s  INFO prepare_target{force=false package_id=orderbook v0.1.0 (C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook) target="orderbook"}: cargo::core::compiler::fingerprint: fingerprint error for orderbook v0.1.0 (C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook)/Check { test: false }/TargetInner { name: "orderbook", doc: true, ..: with_path("C:\\Users\\tahas\\OneDrive\\desktop\\NWCS\\396 - SWE Design Principles\\final-project\\orderbook\\src\\main.rs", Edition2021) }
+   0.053207300s  INFO prepare_target{force=false package_id=orderbook v0.1.0 (C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook) target="orderbook"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\orderbook-a9c2b3d0f38ccaf7\bin-orderbook`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_odb_object_id
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_odb_object_id
+  12: git_odb_object_id
+  13: git_odb_object_id
+  14: <unknown>
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: git_odb_object_data
+  18: git_odb_object_id
+  19: git_midx_writer_new
+  20: git_midx_writer_new
+  21: BaseThreadInitThunk
+  22: RtlUserThreadStart
+   0.061343500s  INFO prepare_target{force=false package_id=rand v0.8.5 target="rand"}: cargo::core::compiler::fingerprint: fingerprint error for rand v0.8.5/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("rand", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\rand-0.8.5\\src\\lib.rs", Edition2018) }
+   0.061406800s  INFO prepare_target{force=false package_id=rand v0.8.5 target="rand"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\rand-3c6f9b47451033a9\lib-rand`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_odb_object_id
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_odb_object_id
+  13: git_odb_object_id
+  14: git_odb_object_id
+  15: <unknown>
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: git_odb_object_data
+  19: git_odb_object_id
+  20: git_midx_writer_new
+  21: git_midx_writer_new
+  22: BaseThreadInitThunk
+  23: RtlUserThreadStart
+   0.061839400s  INFO prepare_target{force=false package_id=rand_chacha v0.3.1 target="rand_chacha"}: cargo::core::compiler::fingerprint: fingerprint error for rand_chacha v0.3.1/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("rand_chacha", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\rand_chacha-0.3.1\\src\\lib.rs", Edition2018) }
+   0.061857600s  INFO prepare_target{force=false package_id=rand_chacha v0.3.1 target="rand_chacha"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\rand_chacha-fcafe6df574518cf\lib-rand_chacha`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_odb_object_id
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_odb_object_id
+  14: git_odb_object_id
+  15: git_odb_object_id
+  16: <unknown>
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: git_odb_object_data
+  20: git_odb_object_id
+  21: git_midx_writer_new
+  22: git_midx_writer_new
+  23: BaseThreadInitThunk
+  24: RtlUserThreadStart
+   0.062023100s  INFO prepare_target{force=false package_id=ppv-lite86 v0.2.21 target="ppv_lite86"}: cargo::core::compiler::fingerprint: fingerprint error for ppv-lite86 v0.2.21/Check { test: false }/TargetInner { ..: lib_target("ppv_lite86", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\ppv-lite86-0.2.21\\src\\lib.rs", Edition2021) }
+   0.062031500s  INFO prepare_target{force=false package_id=ppv-lite86 v0.2.21 target="ppv_lite86"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\ppv-lite86-25b6ce06b1fcd50c\lib-ppv_lite86`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_odb_object_id
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_odb_object_id
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: <unknown>
+  18: git_odb_object_id
+  19: git_odb_object_id
+  20: git_odb_object_data
+  21: git_odb_object_id
+  22: git_midx_writer_new
+  23: git_midx_writer_new
+  24: BaseThreadInitThunk
+  25: RtlUserThreadStart
+   0.062185800s  INFO prepare_target{force=false package_id=zerocopy v0.8.28 target="zerocopy"}: cargo::core::compiler::fingerprint: fingerprint error for zerocopy v0.8.28/Check { test: false }/TargetInner { ..: lib_target("zerocopy", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\zerocopy-0.8.28\\src\\lib.rs", Edition2021) }
+   0.062194100s  INFO prepare_target{force=false package_id=zerocopy v0.8.28 target="zerocopy"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\zerocopy-3d8ecb1293462e53\lib-zerocopy`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_odb_object_id
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: <unknown>
+  19: git_odb_object_id
+  20: git_odb_object_id
+  21: git_odb_object_data
+  22: git_odb_object_id
+  23: git_midx_writer_new
+  24: git_midx_writer_new
+  25: BaseThreadInitThunk
+  26: RtlUserThreadStart
+   0.062564200s  INFO prepare_target{force=false package_id=zerocopy v0.8.28 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for zerocopy v0.8.28/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\zerocopy-0.8.28\\build.rs", Edition2021) }
+   0.062572300s  INFO prepare_target{force=false package_id=zerocopy v0.8.28 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\zerocopy-8f292d828a93aec4\run-build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_odb_object_id
+  15: git_filter_source_path
+  16: git_filter_source_path
+  17: git_filter_source_path
+  18: git_odb_object_id
+  19: git_odb_object_id
+  20: git_odb_object_id
+  21: <unknown>
+  22: git_odb_object_id
+  23: git_odb_object_id
+  24: git_odb_object_data
+  25: git_odb_object_id
+  26: git_midx_writer_new
+  27: git_midx_writer_new
+  28: BaseThreadInitThunk
+  29: RtlUserThreadStart
+   0.062662100s  INFO prepare_target{force=false package_id=zerocopy v0.8.28 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for zerocopy v0.8.28/Build/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\zerocopy-0.8.28\\build.rs", Edition2021) }
+   0.062667900s  INFO prepare_target{force=false package_id=zerocopy v0.8.28 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\zerocopy-140a4bedb138a396\build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_odb_object_id
+  14: git_filter_source_path
+  15: git_filter_source_path
+  16: git_filter_source_path
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: git_odb_object_id
+  20: <unknown>
+  21: git_odb_object_id
+  22: git_odb_object_id
+  23: git_odb_object_data
+  24: git_odb_object_id
+  25: git_midx_writer_new
+  26: git_midx_writer_new
+  27: BaseThreadInitThunk
+  28: RtlUserThreadStart
+   0.063242800s  INFO prepare_target{force=false package_id=rust_decimal v1.39.0 target="rust_decimal"}: cargo::core::compiler::fingerprint: fingerprint error for rust_decimal v1.39.0/Check { test: false }/TargetInner { ..: lib_target("rust_decimal", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\rust_decimal-1.39.0\\src\\lib.rs", Edition2021) }
+   0.063251100s  INFO prepare_target{force=false package_id=rust_decimal v1.39.0 target="rust_decimal"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\rust_decimal-e4b1814c20e19278\lib-rust_decimal`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_odb_object_id
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_odb_object_id
+  13: git_odb_object_id
+  14: git_odb_object_id
+  15: <unknown>
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: git_odb_object_data
+  19: git_odb_object_id
+  20: git_midx_writer_new
+  21: git_midx_writer_new
+  22: BaseThreadInitThunk
+  23: RtlUserThreadStart
+   0.063467900s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="num_traits"}: cargo::core::compiler::fingerprint: fingerprint error for num-traits v0.2.19/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("num_traits", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\num-traits-0.2.19\\src\\lib.rs", Edition2021) }
+   0.063474400s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="num_traits"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\num-traits-d92c136440a9da17\lib-num_traits`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_odb_object_id
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_odb_object_id
+  14: git_odb_object_id
+  15: git_odb_object_id
+  16: <unknown>
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: git_odb_object_data
+  20: git_odb_object_id
+  21: git_midx_writer_new
+  22: git_midx_writer_new
+  23: BaseThreadInitThunk
+  24: RtlUserThreadStart
+   0.063774000s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for num-traits v0.2.19/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\num-traits-0.2.19\\build.rs", Edition2021) }
+   0.063779400s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\num-traits-b5185293238a5a34\run-build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_odb_object_id
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_filter_source_path
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: <unknown>
+  20: git_odb_object_id
+  21: git_odb_object_id
+  22: git_odb_object_data
+  23: git_odb_object_id
+  24: git_midx_writer_new
+  25: git_midx_writer_new
+  26: BaseThreadInitThunk
+  27: RtlUserThreadStart
+   0.063859400s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for num-traits v0.2.19/Build/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\num-traits-0.2.19\\build.rs", Edition2021) }
+   0.063864400s  INFO prepare_target{force=false package_id=num-traits v0.2.19 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\num-traits-86fb6817e815a6b5\build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_odb_object_id
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: <unknown>
+  19: git_odb_object_id
+  20: git_odb_object_id
+  21: git_odb_object_data
+  22: git_odb_object_id
+  23: git_midx_writer_new
+  24: git_midx_writer_new
+  25: BaseThreadInitThunk
+  26: RtlUserThreadStart
+   0.064338400s  INFO prepare_target{force=false package_id=rust_decimal v1.39.0 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for rust_decimal v1.39.0/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\rust_decimal-1.39.0\\build.rs", Edition2021) }
+   0.064343900s  INFO prepare_target{force=false package_id=rust_decimal v1.39.0 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\rust_decimal-db5c50d8c8a25fee\run-build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_odb_object_id
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: <unknown>
+  19: git_odb_object_id
+  20: git_odb_object_id
+  21: git_odb_object_data
+  22: git_odb_object_id
+  23: git_midx_writer_new
+  24: git_midx_writer_new
+  25: BaseThreadInitThunk
+  26: RtlUserThreadStart
+   0.064414800s  INFO prepare_target{force=false package_id=rust_decimal v1.39.0 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for rust_decimal v1.39.0/Build/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\rust_decimal-1.39.0\\build.rs", Edition2021) }
+   0.064420100s  INFO prepare_target{force=false package_id=rust_decimal v1.39.0 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\rust_decimal-5c49686fdc00e698\build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_odb_object_id
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_odb_object_id
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: <unknown>
+  18: git_odb_object_id
+  19: git_odb_object_id
+  20: git_odb_object_data
+  21: git_odb_object_id
+  22: git_midx_writer_new
+  23: git_midx_writer_new
+  24: BaseThreadInitThunk
+  25: RtlUserThreadStart
+   0.064609500s  INFO prepare_target{force=false package_id=serde v1.0.228 target="serde"}: cargo::core::compiler::fingerprint: fingerprint error for serde v1.0.228/Check { test: false }/TargetInner { ..: lib_target("serde", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde-1.0.228\\src\\lib.rs", Edition2021) }
+   0.064616100s  INFO prepare_target{force=false package_id=serde v1.0.228 target="serde"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\serde-1a1bd55c7d82e0df\lib-serde`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_odb_object_id
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_odb_object_id
+  14: git_odb_object_id
+  15: git_odb_object_id
+  16: <unknown>
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: git_odb_object_data
+  20: git_odb_object_id
+  21: git_midx_writer_new
+  22: git_midx_writer_new
+  23: BaseThreadInitThunk
+  24: RtlUserThreadStart
+   0.064918600s  INFO prepare_target{force=false package_id=serde v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for serde v1.0.228/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde-1.0.228\\build.rs", Edition2021) }
+   0.064924000s  INFO prepare_target{force=false package_id=serde v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\serde-f222a9d70f2fc8f8\run-build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_odb_object_id
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_filter_source_path
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: <unknown>
+  20: git_odb_object_id
+  21: git_odb_object_id
+  22: git_odb_object_data
+  23: git_odb_object_id
+  24: git_midx_writer_new
+  25: git_midx_writer_new
+  26: BaseThreadInitThunk
+  27: RtlUserThreadStart
+   0.064997600s  INFO prepare_target{force=false package_id=serde v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for serde v1.0.228/Build/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde-1.0.228\\build.rs", Edition2021) }
+   0.065002300s  INFO prepare_target{force=false package_id=serde v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\serde-39ce1517700eb2bc\build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_odb_object_id
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: <unknown>
+  19: git_odb_object_id
+  20: git_odb_object_id
+  21: git_odb_object_data
+  22: git_odb_object_id
+  23: git_midx_writer_new
+  24: git_midx_writer_new
+  25: BaseThreadInitThunk
+  26: RtlUserThreadStart
+   0.065202700s  INFO prepare_target{force=false package_id=serde_core v1.0.228 target="serde_core"}: cargo::core::compiler::fingerprint: fingerprint error for serde_core v1.0.228/Check { test: false }/TargetInner { ..: lib_target("serde_core", ["lib"], "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_core-1.0.228\\src\\lib.rs", Edition2021) }
+   0.065208600s  INFO prepare_target{force=false package_id=serde_core v1.0.228 target="serde_core"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\serde_core-c9f9249515cd9ecf\lib-serde_core`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_odb_object_id
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_filter_source_path
+  14: git_odb_object_id
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: <unknown>
+  18: git_odb_object_id
+  19: git_odb_object_id
+  20: git_odb_object_data
+  21: git_odb_object_id
+  22: git_midx_writer_new
+  23: git_midx_writer_new
+  24: BaseThreadInitThunk
+  25: RtlUserThreadStart
+   0.065521900s  INFO prepare_target{force=false package_id=serde_core v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for serde_core v1.0.228/RunCustomBuild/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_core-1.0.228\\build.rs", Edition2021) }
+   0.065530100s  INFO prepare_target{force=false package_id=serde_core v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\serde_core-5f82f86b96be5d12\run-build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_filter_source_path
+  13: git_odb_object_id
+  14: git_filter_source_path
+  15: git_filter_source_path
+  16: git_filter_source_path
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: git_odb_object_id
+  20: <unknown>
+  21: git_odb_object_id
+  22: git_odb_object_id
+  23: git_odb_object_data
+  24: git_odb_object_id
+  25: git_midx_writer_new
+  26: git_midx_writer_new
+  27: BaseThreadInitThunk
+  28: RtlUserThreadStart
+   0.066548700s  INFO prepare_target{force=false package_id=serde_core v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint: fingerprint error for serde_core v1.0.228/Build/TargetInner { ..: custom_build_target("build-script-build", "C:\\Users\\tahas\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\serde_core-1.0.228\\build.rs", Edition2021) }
+   0.066613600s  INFO prepare_target{force=false package_id=serde_core v1.0.228 target="build-script-build"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\serde_core-b1cb987acaddd391\build-script-build-script-build`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_filter_source_path
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_filter_source_path
+  12: git_odb_object_id
+  13: git_filter_source_path
+  14: git_filter_source_path
+  15: git_filter_source_path
+  16: git_odb_object_id
+  17: git_odb_object_id
+  18: git_odb_object_id
+  19: <unknown>
+  20: git_odb_object_id
+  21: git_odb_object_id
+  22: git_odb_object_data
+  23: git_odb_object_id
+  24: git_midx_writer_new
+  25: git_midx_writer_new
+  26: BaseThreadInitThunk
+  27: RtlUserThreadStart
+   0.067121100s  INFO prepare_target{force=false package_id=orderbook v0.1.0 (C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook) target="orderbook"}: cargo::core::compiler::fingerprint: fingerprint error for orderbook v0.1.0 (C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook)/Check { test: true }/TargetInner { name: "orderbook", doc: true, ..: with_path("C:\\Users\\tahas\\OneDrive\\desktop\\NWCS\\396 - SWE Design Principles\\final-project\\orderbook\\src\\main.rs", Edition2021) }
+   0.067131200s  INFO prepare_target{force=false package_id=orderbook v0.1.0 (C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook) target="orderbook"}: cargo::core::compiler::fingerprint:     err: failed to read `C:\Users\tahas\OneDrive\desktop\NWCS\396 - SWE Design Principles\final-project\orderbook\target\debug\.fingerprint\orderbook-4241edad2379920c\test-bin-orderbook`
+
+Caused by:
+    The system cannot find the file specified. (os error 2)
+
+Stack backtrace:
+   0: git_odb_object_data
+   1: git_odb_object_data
+   2: git_filter_source_path
+   3: git_filter_source_path
+   4: git_filter_source_path
+   5: git_filter_source_path
+   6: git_filter_source_path
+   7: git_odb_object_id
+   8: git_filter_source_path
+   9: git_filter_source_path
+  10: git_filter_source_path
+  11: git_odb_object_id
+  12: git_odb_object_id
+  13: git_odb_object_id
+  14: <unknown>
+  15: git_odb_object_id
+  16: git_odb_object_id
+  17: git_odb_object_data
+  18: git_odb_object_id
+  19: git_midx_writer_new
+  20: git_midx_writer_new
+  21: BaseThreadInitThunk
+  22: RtlUserThreadStart
+   Compiling zerocopy v0.8.28
+   Compiling serde_core v1.0.228
+   Compiling serde v1.0.228
+   Compiling rust_decimal v1.39.0
+   Compiling num-traits v0.2.19
+error: could not compile `num-traits` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `serde` (build script) due to 1 previous error
+error: could not compile `rust_decimal` (build script) due to 1 previous error
+error: could not compile `serde_core` (build script) due to 1 previous error
+error: could not compile `zerocopy` (build script) due to 1 previous error
