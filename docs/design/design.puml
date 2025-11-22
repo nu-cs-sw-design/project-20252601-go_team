@@ -194,8 +194,6 @@ package Model {
         +loadEvents(path: String): List<MarketEvent>
     }
 
-
-
     ' Data Exporting
     +interface DataExporter {
         +exportTrades(trades: List<Trade>, path: String): void

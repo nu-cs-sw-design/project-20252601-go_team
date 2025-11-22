@@ -7,8 +7,6 @@ fn main() {
     let score = 3;
 
     scores.insert(team, score);
-    // scores.insert(score, team);
-
     for (key, value) in &scores {
         println!("{key}, {value}");
     }
