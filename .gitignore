@@ -257,5 +257,5 @@ gradle-app.setting
 /.idea/
 
 # Rust
-orderbook/target/
-target/
+orderbook/target/*
+target/*
