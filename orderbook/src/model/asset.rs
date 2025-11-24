@@ -38,8 +38,6 @@ pub struct Crypto {
     description: String,
 }
 
-
-
 //
 /// Implementations:
 //
