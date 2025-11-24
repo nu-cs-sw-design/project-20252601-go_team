@@ -14,6 +14,9 @@ pub trait Order {
     fn timestamp(&self) -> i64;
     fn tif(&self) -> TimeInForce;
     fn is_filled(&self) -> bool { self.remaining_quantity().is_zero() }
+    
+    fn clone_asset(&self) -> Arc<dyn TradableAsset>; // Get a cloned Arc to the asset for use in Trades
+
     fn fill(&mut self, qty: Decimal); // Reduce remaining quantity when a trade executes
 }
 
@@ -118,6 +121,10 @@ impl Order for LimitOrder {
         self.tif
     }
 
+    fn clone_asset(&self) -> Arc<dyn TradableAsset> {
+        self.asset.clone()
+    }
+
     fn fill(&mut self, qty: Decimal) {
         // Clamp at zero to avoid negative remaining quantity
         if qty >= self.remaining_quantity {
@@ -177,6 +184,10 @@ impl Order for MarketOrder {
 
     fn tif(&self) -> TimeInForce {
         self.tif
+    }
+
+    fn clone_asset(&self) -> Arc<dyn TradableAsset> {
+        self.asset.clone()
     }
 
     fn fill(&mut self, qty: Decimal) {
