@@ -1,5 +1,7 @@
 // src/model/asset.rs
 
+use std::fmt::Debug;
+
 // Side of an Order
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
@@ -16,7 +18,7 @@ pub enum TimeInForce {
 }
 
 // Any asset that can be traded - Thread Safe
-pub trait TradableAsset: Send + Sync {
+pub trait TradableAsset: Debug + Send + Sync {
     fn ticker(&self) -> &str;
     fn name(&self)-> &str;
     fn description(&self)-> &str;
