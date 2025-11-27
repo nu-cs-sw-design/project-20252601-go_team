@@ -46,8 +46,22 @@ pub struct OrderBookSnapshot {
     pub recent_trades: Vec<Trade>,
 }
 
+// Top-of-book view: best bid, best ask, and spread
+#[derive(Debug, Clone)]
+pub struct TopOfBook {
+    pub best_bid: Option<PriceLevelInfo>,
+    pub best_ask: Option<PriceLevelInfo>,
+    pub spread: Option<Decimal>, // ask - bid, if both sides exist
+}
+
+// Observer interface for order book updates
+pub trait OrderBookObserver: Send + Sync {
+    fn on_order_book_update(&self, snapshot: &OrderBookSnapshot);
+    fn on_new_trade(&self, trade: &Trade);
+}
+
+
 // Core order book for a single asset
-#[derive(Debug)]
 pub struct OrderBook {
     asset: Arc<dyn TradableAsset>,
 
@@ -62,6 +76,9 @@ pub struct OrderBook {
 
     // Simple in-memory trade history
     trade_history: Vec<Trade>,
+
+    // Observers subscribed for updates
+    observers: Vec<Arc<dyn OrderBookObserver>>,
 }
 
 impl OrderBook {
@@ -73,8 +90,21 @@ impl OrderBook {
             asks: BTreeMap::new(),
             orders_by_id: HashMap::new(),
             trade_history: Vec::new(),
+            observers: Vec::new(),
         }
     }
+
+    // --- Observer management ---
+    pub fn add_observer(&mut self, observer: Arc<dyn OrderBookObserver>) {
+        self.observers.push(observer);
+    }
+
+    pub fn remove_observer(&mut self, observer: &Arc<dyn OrderBookObserver>) {
+        self.observers
+            .retain(|obs| !Arc::ptr_eq(obs, observer));
+    }
+
+
 
     // Add a limit order: match against opposite side first, then rest any remaining GTC quantity on this book
     pub fn add_limit_order(&mut self, mut order: LimitOrder) -> Vec<Trade> {
@@ -96,6 +126,11 @@ impl OrderBook {
 
         self.trade_history.extend(trades.iter().cloned());
 
+        for t in &trades {
+            self.notify_new_trade(t);
+        }
+        self.notify_book_update();
+
         trades
     }
 
@@ -114,6 +149,11 @@ impl OrderBook {
 
         self.trade_history.extend(trades.iter().cloned());
 
+        for t in &trades {
+            self.notify_new_trade(t);
+        }
+        self.notify_book_update();
+        
         trades
     }
 
@@ -129,7 +169,7 @@ impl OrderBook {
             Side::SELL => &mut self.asks,
         };
 
-        if let Some(level) = book.get_mut(&order_ref.price) {
+        let success = if let Some(level) = book.get_mut(&order_ref.price) {
             let removed = level.remove_order(order_id);
             if level.total_volume() == Decimal::ZERO {
                 book.remove(&order_ref.price);
@@ -137,7 +177,13 @@ impl OrderBook {
             removed
         } else {
             false
+        };
+
+        if success {
+            self.notify_book_update();
         }
+
+        success
     }
 
     // Modify an existing GTC limit order's price and quantity
@@ -213,6 +259,7 @@ impl OrderBook {
 
         // Insert the modified order as if it were a fresh one
         self.insert_resting_limit(new_order);
+        self.notify_book_update();
 
         true
     }
@@ -310,13 +357,54 @@ impl OrderBook {
         }
     }
 
+    pub fn get_top_of_book(&self) -> Option<TopOfBook> {
+        let best_bid = self.get_best_bid();
+        let best_ask = self.get_best_ask();
+
+        if best_bid.is_none() && best_ask.is_none() {
+            return None;
+        }
+
+        let spread = match (&best_bid, &best_ask) {
+            (Some(bid), Some(ask)) => Some(ask.price - bid.price),
+            _ => None,
+        };
+
+        Some(TopOfBook {
+            best_bid,
+            best_ask,
+            spread,
+        })
+    }
+
     // Clear all book state and history
     pub fn reset(&mut self) {
         self.bids.clear();
         self.asks.clear();
         self.orders_by_id.clear();
         self.trade_history.clear();
+        self.notify_book_update();
     }
+
+    fn notify_book_update(&self) {
+        if self.observers.is_empty() {
+            return;
+        }
+        let snapshot = self.get_snapshot();
+        for obs in &self.observers {
+            obs.on_order_book_update(&snapshot);
+        }
+    }
+
+    fn notify_new_trade(&self, trade: &Trade) {
+        if self.observers.is_empty() {
+            return;
+        }
+        for obs in &self.observers {
+            obs.on_new_trade(trade);
+        }
+    }
+
 
     // --- Internal helpers ---
 
