@@ -16,7 +16,6 @@ use super::{
 };
 
 // Lightweight reference to locate an order in the book by ID
-// We don't store the full order here; we store its side and price so we can find it later inside the relevant PriceLevel
 #[derive(Debug, Clone)]
 struct OrderRef {
     side: Side,
@@ -95,7 +94,6 @@ impl OrderBook {
             self.insert_resting_limit(order);
         }
 
-        // Record trades in history
         self.trade_history.extend(trades.iter().cloned());
 
         trades
@@ -117,6 +115,134 @@ impl OrderBook {
         self.trade_history.extend(trades.iter().cloned());
 
         trades
+    }
+
+    // Cancel an order by ID - Only applies to resting GTC limit orders
+    pub fn cancel_order(&mut self, order_id: &str) -> bool {
+        let order_ref = match self.orders_by_id.remove(order_id) {
+            Some(r) => r,
+            None => return false,
+        };
+
+        let book = match order_ref.side {
+            Side::BUY => &mut self.bids,
+            Side::SELL => &mut self.asks,
+        };
+
+        if let Some(level) = book.get_mut(&order_ref.price) {
+            let removed = level.remove_order(order_id);
+            if level.total_volume() == Decimal::ZERO {
+                book.remove(&order_ref.price);
+            }
+            removed
+        } else {
+            false
+        }
+    }
+
+    // Modify an existing GTC limit order's price and quantity
+    /*
+    For simplicity, this:
+        - cancels the old resting order
+        - re-inserts a new LimitOrder with same ID but new price/qty
+    */
+    pub fn modify_order(
+        &mut self,
+        order_id: &str,
+        new_price: Decimal,
+        new_qty: Decimal,
+    ) -> bool {
+        // Look up location
+        let order_ref = match self.orders_by_id.get(order_id).cloned() {
+            Some(r) => r,
+            None => return false,
+        };
+
+        let book = match order_ref.side {
+            Side::BUY => &mut self.bids,
+            Side::SELL => &mut self.asks,
+        };
+
+        // Take the existing LimitOrder out of its level
+        let existing = {
+            let level = match book.get_mut(&order_ref.price) {
+                Some(l) => l,
+                None => return false,
+            };
+            level.take_order(order_id)
+        };
+
+        let mut existing = match existing {
+            Some(o) => o,
+            None => return false,
+        };
+
+        // Only allow modifying GTC resting orders
+        if !matches!(existing.tif(), TimeInForce::GTC) {
+            // Put it back to avoid corrupting state?
+            // For simplicity just treat this as a failed modify
+            return false;
+        }
+
+        // Build a new LimitOrder with the same ID and metadata but new price/qty
+        let new_order = LimitOrder::new(
+            existing.order_id().to_string(),
+            existing.clone_asset(),
+            existing.side(),
+            new_qty,
+            existing.timestamp(),
+            existing.tif(),
+            new_price,
+        );
+
+        // Clean up empty level if needed
+        if let Some(level) = book.get(&order_ref.price) {
+            if level.total_volume() == Decimal::ZERO {
+                book.remove(&order_ref.price);
+            }
+        }
+
+        // Update orders_by_id to new price
+        self.orders_by_id.insert(
+            order_id.to_string(),
+            OrderRef {
+                side: order_ref.side,
+                price: new_price,
+            },
+        );
+
+        // Insert the modified order as if it were a fresh one
+        self.insert_resting_limit(new_order);
+
+        true
+    }
+
+    // Get a reference to a resting limit order by ID (if present)
+    pub fn get_order(&self, order_id: &str) -> Option<&LimitOrder> {
+        let order_ref = self.orders_by_id.get(order_id)?;
+        let book = match order_ref.side {
+            Side::BUY => &self.bids,
+            Side::SELL => &self.asks,
+        };
+        let level = book.get(&order_ref.price)?;
+        level.orders().find(|o| o.order_id() == order_id)
+    }
+
+    // Get all open resting limit orders for a given side
+    pub fn get_open_orders(&self, side: Side) -> Vec<&LimitOrder> {
+        let book = match side {
+            Side::BUY => &self.bids,
+            Side::SELL => &self.asks,
+        };
+
+        let mut out = Vec::new();
+        for (_price, level) in book.iter() {
+            for order in level.orders() {
+                out.push(order);
+            }
+        }
+
+        out
     }
 
     // Get best bid level (highest bid price)

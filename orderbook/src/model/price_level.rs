@@ -23,17 +23,17 @@ impl PriceLevel {
         }
     }
 
-    /// Price of this level
+    // Price of this level
     pub fn price(&self) -> Decimal {
         self.price
     }
 
-    /// Total remaining volume at this price
+    // Total remaining volume at this price
     pub fn total_volume(&self) -> Decimal {
         self.total_volume
     }
 
-    /// Add a new limit order to the back of the FIFO queue
+    // Add a new limit order to the back of the FIFO queue
     pub fn add_order(&mut self, order: LimitOrder) {
         self.total_volume += order.remaining_quantity();
         self.orders.push_back(order);
@@ -51,6 +51,21 @@ impl PriceLevel {
             true
         } else {
             false
+        }
+    }
+
+    // Take (remove and return) an order by ID, if present
+    pub fn take_order(&mut self, order_id: &str) -> Option<LimitOrder> {
+        if let Some(pos) = self
+            .orders
+            .iter()
+            .position(|o| o.order_id() == order_id)
+        {
+            let removed = self.orders.remove(pos).unwrap();
+            self.total_volume -= removed.remaining_quantity();
+            Some(removed)
+        } else {
+            None
         }
     }
 
@@ -111,8 +126,13 @@ impl PriceLevel {
         trades
     }
 
-    /// Number of resting orders at this price
+    // Number of resting orders at this price
     pub fn order_count(&self) -> usize {
         self.orders.len()
+    }
+
+    // Iterate over orders at this level (for read-only queries)
+    pub fn orders(&self) -> impl Iterator<Item = &LimitOrder> {
+        self.orders.iter()
     }
 }
