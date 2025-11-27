@@ -1,61 +1,35 @@
 // src/main.rs
 
+#[cfg(test)]
+#[path = "tests/api_test.rs"]
+mod api_test;
 
-use actix_web::{web, App, HttpServer, Responder, HttpResponse};
+pub mod controller;
+
+use actix_web::{web, App, HttpServer };
 mod model;
-use std::sync::Arc;
-use rust_decimal::Decimal;
-use model::{Side, TimeInForce, TradableAsset, Stock, LimitOrder, MarketOrder, Order, PriceLevel};
 
-async fn hello() -> impl Responder {
-    "Hello, world!"
-}
-
-async fn print_content(body: String) -> impl Responder {
-    println!("Received content: {}", body);
-    HttpResponse::Ok().body("Content printed to console")
-}
+use controller::controller::{
+    place_limit_order, place_market_order, cancel_order, modify_order,
+    get_order, get_open_orders, reset_book, get_recent_trades,
+    export_trades, export_book_history, health
+};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-
-    let aapl = Arc::new(Stock::new("AAPL", "Apple Inc.", "Big fruit company")) as Arc<dyn TradableAsset>;
-
-    // Create a price level at 100
-    let mut lvl = PriceLevel::new(Decimal::new(100, 0)); // 100
-
-    // Maker: SELL 10 @ 100
-    let maker_order = LimitOrder::new(
-        "ask1".into(),
-        aapl.clone(),
-        Side::SELL,
-        Decimal::new(10, 0),
-        0,
-        TimeInForce::GTC,
-        Decimal::new(100, 0),
-    );
-    lvl.add_order(maker_order);
-
-    // Taker: BUY 6 @ any price (market order)
-    let mut taker = MarketOrder::new(
-        "m1".into(),
-        aapl.clone(),
-        Side::BUY,
-        Decimal::new(6, 0),
-        1,
-        TimeInForce::IOC,
-    );
-
-    let trades = lvl.match_with(&mut taker);
-
-    println!("Trades: {:#?}", trades);
-    println!("Level volume: {}", lvl.total_volume());
-    println!("Taker remaining: {}", taker.remaining_quantity());
-
     HttpServer::new(|| {
         App::new()
-            .route("/", web::get().to(hello))
-            .route("/print", web::post().to(print_content))
+            .route("/health", web::post().to(health))
+            .route("/place_limit_order", web::post().to(place_limit_order))
+            .route("/place_market_order", web::post().to(place_market_order))
+            .route("/cancel_order", web::post().to(cancel_order))
+            .route("/modify_order", web::post().to(modify_order))
+            .route("/get_order", web::get().to(get_order))
+            .route("/get_open_orders", web::get().to(get_open_orders))
+            .route("/reset_book", web::post().to(reset_book))
+            .route("/get_recent_trades", web::get().to(get_recent_trades))
+            .route("/export_trades", web::post().to(export_trades))
+            .route("/export_book_history", web::post().to(export_book_history))
     })
     .bind("127.0.0.1:8080")?
     .run()
