@@ -95,19 +95,32 @@ impl OrderBook {
     }
 
     // --- Observer management ---
+
     pub fn add_observer(&mut self, observer: Arc<dyn OrderBookObserver>) {
         self.observers.push(observer);
     }
 
     pub fn remove_observer(&mut self, observer: &Arc<dyn OrderBookObserver>) {
-        self.observers
-            .retain(|obs| !Arc::ptr_eq(obs, observer));
+        self.observers.retain(|obs| !Arc::ptr_eq(obs, observer));
     }
 
+    // --------- TIF-aware order entry ----------
 
-
-    // Add a limit order: match against opposite side first, then rest any remaining GTC quantity on this book
+    // Add a limit order with proper TIF behavior:
+    // - GTC: match, then rest remaining quantity
+    // - IOC: match whatever is immediately available, drop remainder
+    // - FOK: only execute if full quantity can be immediately filled; otherwise do nothing
     pub fn add_limit_order(&mut self, mut order: LimitOrder) -> Vec<Trade> {
+        // FOK pre-check: ensure full fill is possible at acceptable prices
+        if matches!(order.tif(), TimeInForce::FOK) {
+            let needed = order.quantity();
+            let available = self.total_available_volume_for_limit(order.side(), order.price());
+            if available < needed {
+                // Cannot fully fill -> do nothing
+                return Vec::new();
+            }
+        }
+
         let mut trades = Vec::new();
 
         match order.side() {
@@ -119,13 +132,15 @@ impl OrderBook {
             }
         }
 
-        // For now: only GTC orders rest on the book
+        // GTC: rest remaining quantity
         if !order.is_filled() && matches!(order.tif(), TimeInForce::GTC) {
             self.insert_resting_limit(order);
         }
+        // IOC: never rest (we already matched what we could)
+        // FOK: pre-check guarantees full fill if we got here; if somehow not filled,
+        // we still don't rest anything
 
         self.trade_history.extend(trades.iter().cloned());
-
         for t in &trades {
             self.notify_new_trade(t);
         }
@@ -134,8 +149,20 @@ impl OrderBook {
         trades
     }
 
-    // Add a market order: match against opposite side, do not rest
+    // Add a market order:
+    // - IOC (typical): match as much as possible, drop remainder (current behavior)
+    // - FOK: pre-check full available volume; if insufficient, do nothing
+    // - GTC doesn't really make sense for market orders; we just treat them as IOC
     pub fn add_market_order(&mut self, mut order: MarketOrder) -> Vec<Trade> {
+        if matches!(order.tif(), TimeInForce::FOK) {
+            let needed = order.quantity();
+            let available = self.total_available_volume_for_market(order.side());
+            if available < needed {
+                // Cannot fully fill -> do nothing
+                return Vec::new();
+            }
+        }
+
         let mut trades = Vec::new();
 
         match order.side() {
@@ -148,12 +175,11 @@ impl OrderBook {
         }
 
         self.trade_history.extend(trades.iter().cloned());
-
         for t in &trades {
             self.notify_new_trade(t);
         }
         self.notify_book_update();
-        
+
         trades
     }
 
@@ -218,7 +244,7 @@ impl OrderBook {
             level.take_order(order_id)
         };
 
-        let mut existing = match existing {
+        let existing = match existing {
             Some(o) => o,
             None => return false,
         };
@@ -405,7 +431,6 @@ impl OrderBook {
         }
     }
 
-
     // --- Internal helpers ---
 
     fn insert_resting_limit(&mut self, order: LimitOrder) {
@@ -422,6 +447,50 @@ impl OrderBook {
         level.add_order(order);
 
         self.orders_by_id.insert(order_id, OrderRef { side, price });
+    }
+
+    // Total volume immediately available to a limit order at its limit price
+    fn total_available_volume_for_limit(&self, side: Side, limit_price: Decimal) -> Decimal {
+        let mut total = Decimal::ZERO;
+        match side {
+            Side::BUY => {
+                // Can buy from all asks priced <= limit_price
+                for (price, level) in self.asks.iter() {
+                    if *price > limit_price {
+                        break;
+                    }
+                    total += level.total_volume();
+                }
+            }
+            Side::SELL => {
+                // Can sell into all bids priced >= limit_price
+                for (price, level) in self.bids.iter().rev() {
+                    if *price < limit_price {
+                        break;
+                    }
+                    total += level.total_volume();
+                }
+            }
+        }
+        total
+    }
+
+    // Total volume immediately available for a market order
+    fn total_available_volume_for_market(&self, side: Side) -> Decimal {
+        let mut total = Decimal::ZERO;
+        match side {
+            Side::BUY => {
+                for (_price, level) in self.asks.iter() {
+                    total += level.total_volume();
+                }
+            }
+            Side::SELL => {
+                for (_price, level) in self.bids.iter() {
+                    total += level.total_volume();
+                }
+            }
+        }
+        total
     }
 
     fn match_against_asks_for_limit(
