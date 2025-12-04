@@ -1,14 +1,22 @@
 use actix_web::{web, HttpResponse, Responder};
-use serde::{Deserialize, Serialize};
 use rust_decimal::Decimal;
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::model::{Side, TimeInForce, Stock, LimitOrder, MarketOrder};
+use crate::model::{LimitOrder, Order, OrderBook, Side, Stock, TimeInForce, TradableAsset, Trade};
+
+// Global registry of order books keyed by symbol.
+static ORDER_BOOKS: OnceLock<Mutex<HashMap<String, OrderBook>>> = OnceLock::new();
+
+fn order_books() -> &'static Mutex<HashMap<String, OrderBook>> {
+    ORDER_BOOKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 // --- DTOs for Responses ---
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TradeDto {
     pub trade_id: String,
     pub symbol: String,
@@ -19,7 +27,7 @@ pub struct TradeDto {
     pub timestamp: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OrderDto {
     pub order_id: String,
     pub symbol: String,
@@ -30,6 +38,13 @@ pub struct OrderDto {
     pub tif: String,
     pub timestamp: i64,
     pub type_: String, // "LIMIT" or "MARKET"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlaceLimitOrderResponse {
+    pub order_id: String,
+    pub trades: Vec<TradeDto>,
+    pub resting_order: Option<OrderDto>,
 }
 
 // --- Request Structs ---
@@ -105,22 +120,33 @@ pub async fn place_limit_order(req: web::Json<PlaceLimitOrderRequest>) -> impl R
     println!("--- Placing Limit Order ---");
 
     // 1. Parse Side Enum
-    let side: Side = match req.side.to_uppercase().as_str() {
-        "BUY" => Side::BUY,
-        "SELL" => Side::SELL,
-        _ => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
+    let side = match parse_side(&req.side) {
+        Some(side) => side,
+        None => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
     };
 
     // 2. Parse TimeInForce Enum
-    let tif: TimeInForce = match req.tif.to_uppercase().as_str() {
-        "GTC" => TimeInForce::GTC,
-        "IOC" => TimeInForce::IOC,
-        "FOK" => TimeInForce::FOK,
-        _ => return HttpResponse::BadRequest().body("Invalid TIF. Must be GTC, IOC, or FOK"),
+    let tif = match parse_tif(&req.tif) {
+        Some(tif) => tif,
+        None => {
+            return HttpResponse::BadRequest().body("Invalid TIF. Must be GTC, IOC, or FOK");
+        }
     };
 
+    if req.quantity <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("Quantity must be positive");
+    }
+
+    if req.price <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("Price must be positive");
+    }
+
     // 3. Create Asset (Mocking lookup since we don't have the simulator state here)
-    let asset: Arc<Stock> = Arc::new(Stock::new(String::from(&req.symbol), String::from("Unknown Name"), String::from("Created via API")));
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        String::from(&req.symbol),
+        String::from("Unknown Name"),
+        String::from("Created via API"),
+    ));
 
     // 4. Generate Metadata
     let timestamp = SystemTime::now()
@@ -132,7 +158,7 @@ pub async fn place_limit_order(req: web::Json<PlaceLimitOrderRequest>) -> impl R
     // 5. Instantiate the actual Domain Object
     let order = LimitOrder::new(
         order_id.clone(),
-        asset,
+        asset.clone(),
         side,
         req.quantity,
         timestamp,
@@ -142,30 +168,56 @@ pub async fn place_limit_order(req: web::Json<PlaceLimitOrderRequest>) -> impl R
 
     println!("Successfully created internal order object:");
     println!("{:#?}", order);
-    
-    // TODO: Add order to OrderBook via Model/Simulator
 
-    HttpResponse::Ok().body(order_id)
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let symbol_key = req.symbol.clone();
+    let book = books_guard
+        .entry(symbol_key.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    let trades = book.add_limit_order(order);
+    let resting_order = book.get_order(&order_id).map(limit_order_to_dto);
+
+    drop(books_guard);
+
+    let trade_dtos: Vec<TradeDto> = trades.into_iter().map(trade_to_dto).collect();
+
+    let response = PlaceLimitOrderResponse {
+        order_id,
+        trades: trade_dtos,
+        resting_order,
+    };
+
+    HttpResponse::Ok().json(response)
 }
 
 pub async fn place_market_order(req: web::Json<PlaceMarketOrderRequest>) -> impl Responder {
     println!("--- Placing Market Order ---");
-    println!("Symbol: {}, Side: {}, Qty: {}, TIF: {}", req.symbol, req.side, req.quantity, req.tif);
+    println!(
+        "Symbol: {}, Side: {}, Qty: {}, TIF: {}",
+        req.symbol, req.side, req.quantity, req.tif
+    );
 
     // Mocking logic
     // TODO: Call model to place market order and get trades
 
-    let trades = vec![
-        TradeDto {
-            trade_id: "trade-1".to_string(),
-            symbol: req.symbol.clone(),
-            price: Decimal::new(100, 0),
-            quantity: req.quantity,
-            taker_order_id: "taker-1".to_string(),
-            maker_order_id: "maker-1".to_string(),
-            timestamp: 1234567890,
-        }
-    ];
+    let trades = vec![TradeDto {
+        trade_id: "trade-1".to_string(),
+        symbol: req.symbol.clone(),
+        price: Decimal::new(100, 0),
+        quantity: req.quantity,
+        taker_order_id: "taker-1".to_string(),
+        maker_order_id: "maker-1".to_string(),
+        timestamp: 1234567890,
+    }];
 
     println!("Market Order placed. Trades generated: {}", trades.len());
     HttpResponse::Ok().json(trades)
@@ -184,7 +236,10 @@ pub async fn cancel_order(req: web::Json<CancelOrderRequest>) -> impl Responder 
 
 pub async fn modify_order(req: web::Json<ModifyOrderRequest>) -> impl Responder {
     println!("--- Modifying Order ---");
-    println!("Symbol: {}, OrderID: {}, NewPrice: {}, NewQty: {}", req.symbol, req.order_id, req.new_price, req.new_quantity);
+    println!(
+        "Symbol: {}, OrderID: {}, NewPrice: {}, NewQty: {}",
+        req.symbol, req.order_id, req.new_price, req.new_quantity
+    );
 
     // TODO: Call model to modify order
     let success = true;
@@ -198,7 +253,7 @@ pub async fn get_order(info: web::Query<GetOrderRequest>) -> impl Responder {
     println!("Symbol: {}, OrderID: {}", info.symbol, info.order_id);
 
     // TODO: Fetch order from model
-    
+
     let order_dto = OrderDto {
         order_id: info.order_id.clone(),
         symbol: info.symbol.clone(),
@@ -221,19 +276,17 @@ pub async fn get_open_orders(info: web::Query<GetOpenOrdersRequest>) -> impl Res
 
     // TODO: Fetch open orders from model
 
-    let orders = vec![
-        OrderDto {
-            order_id: "ord-1".to_string(),
-            symbol: info.symbol.clone(),
-            side: info.side.clone(),
-            quantity: Decimal::new(10, 0),
-            remaining_quantity: Decimal::new(10, 0),
-            price: Some(Decimal::new(150, 0)),
-            tif: "GTC".to_string(),
-            timestamp: 1234567890,
-            type_: "LIMIT".to_string(),
-        }
-    ];
+    let orders = vec![OrderDto {
+        order_id: "ord-1".to_string(),
+        symbol: info.symbol.clone(),
+        side: info.side.clone(),
+        quantity: Decimal::new(10, 0),
+        remaining_quantity: Decimal::new(10, 0),
+        price: Some(Decimal::new(150, 0)),
+        tif: "GTC".to_string(),
+        timestamp: 1234567890,
+        type_: "LIMIT".to_string(),
+    }];
 
     println!("Open orders count: {}", orders.len());
     HttpResponse::Ok().json(orders)
@@ -255,17 +308,15 @@ pub async fn get_recent_trades(info: web::Query<GetRecentTradesRequest>) -> impl
 
     // TODO: Fetch recent trades from model
 
-    let trades = vec![
-        TradeDto {
-            trade_id: "trade-recent-1".to_string(),
-            symbol: info.symbol.clone(),
-            price: Decimal::new(100, 0),
-            quantity: Decimal::new(5, 0),
-            taker_order_id: "taker-1".to_string(),
-            maker_order_id: "maker-1".to_string(),
-            timestamp: 1234567890,
-        }
-    ];
+    let trades = vec![TradeDto {
+        trade_id: "trade-recent-1".to_string(),
+        symbol: info.symbol.clone(),
+        price: Decimal::new(100, 0),
+        quantity: Decimal::new(5, 0),
+        taker_order_id: "taker-1".to_string(),
+        maker_order_id: "maker-1".to_string(),
+        timestamp: 1234567890,
+    }];
 
     println!("Recent trades returned: {}", trades.len());
     HttpResponse::Ok().json(trades)
@@ -289,4 +340,74 @@ pub async fn export_book_history(req: web::Json<ExportRequest>) -> impl Responde
 
     println!("Book history exported to: {}", req.path);
     HttpResponse::Ok().finish()
+}
+
+fn parse_side(input: &str) -> Option<Side> {
+    match input.trim().to_ascii_uppercase().as_str() {
+        "BUY" => Some(Side::BUY),
+        "SELL" => Some(Side::SELL),
+        _ => None,
+    }
+}
+
+fn parse_tif(input: &str) -> Option<TimeInForce> {
+    match input.trim().to_ascii_uppercase().as_str() {
+        "GTC" => Some(TimeInForce::GTC),
+        "IOC" => Some(TimeInForce::IOC),
+        "FOK" => Some(TimeInForce::FOK),
+        _ => None,
+    }
+}
+
+fn side_to_string(side: Side) -> &'static str {
+    match side {
+        Side::BUY => "BUY",
+        Side::SELL => "SELL",
+    }
+}
+
+fn tif_to_string(tif: TimeInForce) -> &'static str {
+    match tif {
+        TimeInForce::GTC => "GTC",
+        TimeInForce::IOC => "IOC",
+        TimeInForce::FOK => "FOK",
+    }
+}
+
+fn limit_order_to_dto(order: &LimitOrder) -> OrderDto {
+    OrderDto {
+        order_id: order.order_id().to_string(),
+        symbol: order.asset().ticker().to_string(),
+        side: side_to_string(order.side()).to_string(),
+        quantity: order.quantity(),
+        remaining_quantity: order.remaining_quantity(),
+        price: Some(order.price()),
+        tif: tif_to_string(order.tif()).to_string(),
+        timestamp: order.timestamp(),
+        type_: "LIMIT".to_string(),
+    }
+}
+
+fn trade_to_dto(trade: Trade) -> TradeDto {
+    let Trade {
+        trade_id,
+        asset,
+        price,
+        quantity,
+        taker_order_id,
+        maker_order_id,
+        timestamp,
+    } = trade;
+
+    let symbol = asset.ticker().to_string();
+
+    TradeDto {
+        trade_id,
+        symbol,
+        price,
+        quantity,
+        taker_order_id,
+        maker_order_id,
+        timestamp,
+    }
 }

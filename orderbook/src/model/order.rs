@@ -1,8 +1,8 @@
 // src/model/order.rs
 
-use std::sync::Arc;
+use super::{Side, TimeInForce, TradableAsset};
 use rust_decimal::Decimal;
-use super::{TradableAsset, Side, TimeInForce};
+use std::sync::Arc;
 
 // Common behavior for all order types
 pub trait Order {
@@ -13,8 +13,10 @@ pub trait Order {
     fn remaining_quantity(&self) -> Decimal;
     fn timestamp(&self) -> i64;
     fn tif(&self) -> TimeInForce;
-    fn is_filled(&self) -> bool { self.remaining_quantity().is_zero() }
-    
+    fn is_filled(&self) -> bool {
+        self.remaining_quantity().is_zero()
+    }
+
     fn clone_asset(&self) -> Arc<dyn TradableAsset>; // Get a cloned Arc to the asset for use in Trades
 
     fn fill(&mut self, qty: Decimal); // Reduce remaining quantity when a trade executes
@@ -57,8 +59,6 @@ pub struct Trade {
     pub maker_order_id: String,
     pub timestamp: i64,
 }
-
-
 
 //
 /// Implementations:
@@ -135,7 +135,6 @@ impl Order for LimitOrder {
     }
 }
 
-
 impl MarketOrder {
     pub fn new(
         order_id: String,
@@ -198,7 +197,6 @@ impl Order for MarketOrder {
         }
     }
 }
-
 
 impl Trade {
     #[allow(clippy::too_many_arguments)]

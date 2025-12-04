@@ -1,19 +1,10 @@
 // src/model/order_book.rs
 
+use rust_decimal::Decimal;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
-use rust_decimal::Decimal;
 
-use super::{
-    TradableAsset,
-    Side,
-    TimeInForce,
-    LimitOrder,
-    MarketOrder,
-    Order,
-    Trade,
-    PriceLevel,
-};
+use super::{LimitOrder, MarketOrder, Order, PriceLevel, Side, TimeInForce, TradableAsset, Trade};
 
 // Lightweight reference to locate an order in the book by ID
 #[derive(Debug, Clone)]
@@ -59,7 +50,6 @@ pub trait OrderBookObserver: Send + Sync {
     fn on_order_book_update(&self, snapshot: &OrderBookSnapshot);
     fn on_new_trade(&self, trade: &Trade);
 }
-
 
 // Core order book for a single asset
 pub struct OrderBook {
@@ -218,12 +208,7 @@ impl OrderBook {
         - cancels the old resting order
         - re-inserts a new LimitOrder with same ID but new price/qty
     */
-    pub fn modify_order(
-        &mut self,
-        order_id: &str,
-        new_price: Decimal,
-        new_qty: Decimal,
-    ) -> bool {
+    pub fn modify_order(&mut self, order_id: &str, new_price: Decimal, new_qty: Decimal) -> bool {
         // Look up location
         let order_ref = match self.orders_by_id.get(order_id).cloned() {
             Some(r) => r,

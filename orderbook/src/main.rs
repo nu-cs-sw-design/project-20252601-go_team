@@ -2,21 +2,12 @@
 
 mod model;
 
-use std::sync::Arc;
 use rust_decimal::Decimal;
+use std::sync::Arc;
 
 use model::{
-    Stock,
-    TradableAsset,
-    Side,
-    TimeInForce,
-    LimitOrder,
-    MarketOrder,
-    OrderBook,
-    OrderBookObserver,
-    OrderBookSnapshot,
-    Trade,
-    Order,
+    LimitOrder, MarketOrder, Order, OrderBook, OrderBookObserver, OrderBookSnapshot, Side, Stock,
+    TimeInForce, TradableAsset, Trade,
 };
 
 #[derive(Debug)]
@@ -75,8 +66,8 @@ fn main() {
         "ask1".to_string(),
         aapl.clone(),
         Side::SELL,
-        Decimal::new(10, 0),  // 10
-        0,                    // timestamp
+        Decimal::new(10, 0), // 10
+        0,                   // timestamp
         TimeInForce::GTC,
         Decimal::new(100, 0), // price = 100
     );
@@ -133,9 +124,7 @@ fn main() {
     );
 
     let trades_fok_fail = book.add_limit_order(fok_fail);
-    println!(
-        "Trades from FOK BUY fok_fail (expect none): {trades_fok_fail:?}"
-    );
+    println!("Trades from FOK BUY fok_fail (expect none): {trades_fok_fail:?}");
     print_top_of_book(&book, "after fok_fail");
 
     // ----- 5. Add another ask: SELL 2 @ 101 GTC -----
@@ -215,37 +204,9 @@ fn main() {
     );
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 //
 // OLD MAIN:
 //
-
-
-
 
 // #[cfg(test)]
 // #[path = "tests/api_test.rs"]
@@ -282,4 +243,3 @@ fn main() {
 //     .run()
 //     .await
 // }
-
