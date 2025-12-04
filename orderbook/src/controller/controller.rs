@@ -360,19 +360,32 @@ pub async fn get_order(info: web::Query<GetOrderRequest>) -> impl Responder {
     println!("--- Get Order ---");
     println!("Symbol: {}, OrderID: {}", info.symbol, info.order_id);
 
-    // TODO: Fetch order from model
+    if info.symbol.trim().is_empty() || info.order_id.trim().is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and order_id must be provided");
+    }
 
-    let order_dto = OrderDto {
-        order_id: info.order_id.clone(),
-        symbol: info.symbol.clone(),
-        side: "BUY".to_string(),
-        quantity: Decimal::new(10, 0),
-        remaining_quantity: Decimal::new(5, 0),
-        price: Some(Decimal::new(150, 0)),
-        tif: "GTC".to_string(),
-        timestamp: 1234567890,
-        type_: "LIMIT".to_string(),
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
     };
+
+    let book = match books_guard.get(&info.symbol) {
+        Some(book) => book,
+        None => {
+            return HttpResponse::NotFound().body("Order book for symbol not found");
+        }
+    };
+
+    let order = match book.get_order(&info.order_id) {
+        Some(order) => order,
+        None => return HttpResponse::NotFound().body("Order not found"),
+    };
+
+    let order_dto = limit_order_to_dto(order);
 
     println!("Order found: {:?}", order_dto.order_id);
     HttpResponse::Ok().json(order_dto)
@@ -382,19 +395,36 @@ pub async fn get_open_orders(info: web::Query<GetOpenOrdersRequest>) -> impl Res
     println!("--- Get Open Orders ---");
     println!("Symbol: {}, Side: {}", info.symbol, info.side);
 
-    // TODO: Fetch open orders from model
+    let side = match parse_side(&info.side) {
+        Some(side) => side,
+        None => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
+    };
 
-    let orders = vec![OrderDto {
-        order_id: "ord-1".to_string(),
-        symbol: info.symbol.clone(),
-        side: info.side.clone(),
-        quantity: Decimal::new(10, 0),
-        remaining_quantity: Decimal::new(10, 0),
-        price: Some(Decimal::new(150, 0)),
-        tif: "GTC".to_string(),
-        timestamp: 1234567890,
-        type_: "LIMIT".to_string(),
-    }];
+    if info.symbol.trim().is_empty() {
+        return HttpResponse::BadRequest().body("Symbol must be provided");
+    }
+
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = match books_guard.get(&info.symbol) {
+        Some(book) => book,
+        None => {
+            return HttpResponse::NotFound().body("Order book for symbol not found");
+        }
+    };
+
+    let orders: Vec<OrderDto> = book
+        .get_open_orders(side)
+        .into_iter()
+        .map(limit_order_to_dto)
+        .collect();
 
     println!("Open orders count: {}", orders.len());
     HttpResponse::Ok().json(orders)
