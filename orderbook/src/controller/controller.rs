@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::model::{LimitOrder, Order, OrderBook, Side, Stock, TimeInForce, TradableAsset, Trade};
+use crate::model::{
+    LimitOrder, MarketOrder, Order, OrderBook, Side, Stock, TimeInForce, TradableAsset, Trade,
+};
 
 // Global registry of order books keyed by symbol.
 static ORDER_BOOKS: OnceLock<Mutex<HashMap<String, OrderBook>>> = OnceLock::new();
@@ -45,6 +47,15 @@ pub struct PlaceLimitOrderResponse {
     pub order_id: String,
     pub trades: Vec<TradeDto>,
     pub resting_order: Option<OrderDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlaceMarketOrderResponse {
+    pub order_id: String,
+    pub trades: Vec<TradeDto>,
+    pub executed_quantity: Decimal,
+    pub fully_filled: bool,
+    pub tif: String,
 }
 
 // --- Request Structs ---
@@ -206,29 +217,103 @@ pub async fn place_market_order(req: web::Json<PlaceMarketOrderRequest>) -> impl
         req.symbol, req.side, req.quantity, req.tif
     );
 
-    // Mocking logic
-    // TODO: Call model to place market order and get trades
+    let side = match parse_side(&req.side) {
+        Some(side) => side,
+        None => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
+    };
 
-    let trades = vec![TradeDto {
-        trade_id: "trade-1".to_string(),
-        symbol: req.symbol.clone(),
-        price: Decimal::new(100, 0),
-        quantity: req.quantity,
-        taker_order_id: "taker-1".to_string(),
-        maker_order_id: "maker-1".to_string(),
-        timestamp: 1234567890,
-    }];
+    if req.quantity <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("Quantity must be positive");
+    }
 
-    println!("Market Order placed. Trades generated: {}", trades.len());
-    HttpResponse::Ok().json(trades)
+    let tif = match parse_tif(&req.tif) {
+        Some(TimeInForce::GTC) => {
+            println!("Market order received with GTC TIF; coercing to IOC");
+            TimeInForce::IOC
+        }
+        Some(tif) => tif,
+        None => return HttpResponse::BadRequest().body("Invalid TIF. Must be GTC, IOC, or FOK"),
+    };
+
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        String::from(&req.symbol),
+        String::from("Unknown Name"),
+        String::from("Created via API"),
+    ));
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let order_id = format!("mkt-{}-{}", req.symbol, timestamp);
+
+    let market_order = MarketOrder::new(
+        order_id.clone(),
+        asset.clone(),
+        side,
+        req.quantity,
+        timestamp,
+        tif,
+    );
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(req.symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    let trades = book.add_market_order(market_order);
+    let executed_quantity = trades
+        .iter()
+        .fold(Decimal::ZERO, |acc, trade| acc + trade.quantity);
+
+    drop(books_guard);
+
+    let trade_dtos: Vec<TradeDto> = trades.into_iter().map(trade_to_dto).collect();
+
+    let response = PlaceMarketOrderResponse {
+        order_id,
+        trades: trade_dtos,
+        executed_quantity,
+        fully_filled: executed_quantity >= req.quantity,
+        tif: tif_to_string(tif).to_string(),
+    };
+
+    println!(
+        "Market Order placed. Trades generated: {}, Executed Qty: {}",
+        response.trades.len(),
+        response.executed_quantity
+    );
+    HttpResponse::Ok().json(response)
 }
 
 pub async fn cancel_order(req: web::Json<CancelOrderRequest>) -> impl Responder {
     println!("--- Cancelling Order ---");
     println!("Symbol: {}, OrderID: {}", req.symbol, req.order_id);
+    if req.symbol.trim().is_empty() || req.order_id.trim().is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and order_id must be provided");
+    }
 
-    // TODO: Call model to cancel order
-    let success = true;
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let success = books_guard
+        .get_mut(&req.symbol)
+        .map(|book| book.cancel_order(&req.order_id))
+        .unwrap_or(false);
 
     println!("Order cancelled status: {}", success);
     HttpResponse::Ok().json(success)
@@ -241,8 +326,31 @@ pub async fn modify_order(req: web::Json<ModifyOrderRequest>) -> impl Responder 
         req.symbol, req.order_id, req.new_price, req.new_quantity
     );
 
-    // TODO: Call model to modify order
-    let success = true;
+    if req.symbol.trim().is_empty() || req.order_id.trim().is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and order_id must be provided");
+    }
+
+    if req.new_price <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("New price must be positive");
+    }
+
+    if req.new_quantity <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("New quantity must be positive");
+    }
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let success = books_guard
+        .get_mut(&req.symbol)
+        .map(|book| book.modify_order(&req.order_id, req.new_price, req.new_quantity))
+        .unwrap_or(false);
 
     println!("Order modified status: {}", success);
     HttpResponse::Ok().json(success)
