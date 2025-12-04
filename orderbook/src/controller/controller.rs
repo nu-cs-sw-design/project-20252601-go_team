@@ -2,7 +2,9 @@ use actix_web::{web, HttpResponse, Responder};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -17,6 +19,12 @@ static ORDER_BOOKS: OnceLock<Mutex<HashMap<String, OrderBook>>> = OnceLock::new(
 
 fn order_books() -> &'static Mutex<HashMap<String, OrderBook>> {
     ORDER_BOOKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+static SIMULATION_SESSIONS: OnceLock<Mutex<HashMap<String, SimulationSession>>> = OnceLock::new();
+
+fn simulation_sessions() -> &'static Mutex<HashMap<String, SimulationSession>> {
+    SIMULATION_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 // --- DTOs for Responses ---
@@ -128,6 +136,40 @@ pub struct ExportResponse {
     pub exported: bool,
     pub path: String,
     pub count: usize,
+}
+
+#[derive(Deserialize)]
+pub struct LoadEventStreamRequest {
+    pub path: String,
+    pub symbol: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoadEventStreamResponse {
+    pub symbol: String,
+    pub applied_events: usize,
+    pub rejected_events: usize,
+    pub generated_order_ids: Vec<String>,
+    pub last_timestamp: Option<i64>,
+    pub errors: Vec<String>,
+    pub simulation_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct RunSimulationToEndRequest {
+    #[serde(rename = "simId", alias = "sim_id")]
+    pub sim_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RunSimulationToEndResponse {
+    pub sim_id: String,
+    pub symbol: String,
+    pub applied_events: usize,
+    pub rejected_events: usize,
+    pub generated_order_ids: Vec<String>,
+    pub last_timestamp: Option<i64>,
+    pub errors: Vec<String>,
 }
 
 // --- Handlers ---
@@ -651,6 +693,167 @@ pub async fn export_book_history(req: web::Json<ExportRequest>) -> impl Responde
     HttpResponse::Ok().json(response)
 }
 
+pub async fn load_event_stream(req: web::Json<LoadEventStreamRequest>) -> impl Responder {
+    println!("--- Load Event Stream ---");
+    println!("Symbol: {}, Path: {}", req.symbol, req.path);
+
+    let raw_symbol = req.symbol.trim();
+    let raw_path = req.path.trim();
+    if raw_symbol.is_empty() || raw_path.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and path must be provided");
+    }
+
+    let symbol = raw_symbol.to_string();
+    let path = raw_path.to_string();
+
+    let contents = match fs::read_to_string(&path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Failed to read event stream: {}", err);
+            return HttpResponse::BadRequest().body("Unable to read event stream file");
+        }
+    };
+
+    let events: Vec<RawEvent> = match serde_json::from_str(&contents) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            eprintln!("Failed to parse event stream JSON: {}", err);
+            return HttpResponse::BadRequest().body("Invalid event stream format");
+        }
+    };
+
+    let simulation_id = format!("sim-{}", Uuid::new_v4());
+    {
+        let sessions = simulation_sessions();
+        let mut sessions_guard = match sessions.lock() {
+            Ok(guard) => guard,
+            Err(err) => {
+                eprintln!("Failed to lock simulation registry: {}", err);
+                return HttpResponse::InternalServerError().body("Simulation registry unavailable");
+            }
+        };
+
+        sessions_guard.insert(
+            simulation_id.clone(),
+            SimulationSession {
+                symbol: symbol.clone(),
+                events: events.clone(),
+            },
+        );
+    }
+
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        symbol.clone(),
+        String::from("Unknown Name"),
+        String::from("Created via event stream"),
+    ));
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    let mut stats = EventLoadStats::default();
+    for (idx, event) in events.into_iter().enumerate() {
+        if let Err(err) = apply_event(&symbol, book, &asset, event, idx as i64, &mut stats) {
+            stats.rejected_events += 1;
+            stats.errors.push(format!("Event {}: {}", idx, err));
+        }
+    }
+
+    let response = LoadEventStreamResponse {
+        symbol,
+        applied_events: stats.applied_events,
+        rejected_events: stats.rejected_events,
+        generated_order_ids: stats.generated_order_ids,
+        last_timestamp: stats.last_timestamp,
+        errors: stats.errors,
+        simulation_id,
+    };
+
+    HttpResponse::Ok().json(response)
+}
+
+pub async fn run_simulation_to_end(req: web::Json<RunSimulationToEndRequest>) -> impl Responder {
+    println!("--- Run Simulation To End ---");
+    println!("SimId: {}", req.sim_id);
+
+    let raw_sim_id = req.sim_id.trim();
+    if raw_sim_id.is_empty() {
+        return HttpResponse::BadRequest().body("Simulation ID must be provided");
+    }
+
+    let sim_id = raw_sim_id.to_string();
+
+    let sessions = simulation_sessions();
+    let sessions_guard = match sessions.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock simulation registry: {}", err);
+            return HttpResponse::InternalServerError().body("Simulation registry unavailable");
+        }
+    };
+
+    let session = match sessions_guard.get(&sim_id) {
+        Some(session) => session.clone(),
+        None => return HttpResponse::NotFound().body("Simulation not found"),
+    };
+    drop(sessions_guard);
+
+    let symbol = session.symbol.clone();
+
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        symbol.clone(),
+        String::from("Unknown Name"),
+        String::from("Created via simulation"),
+    ));
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    book.reset();
+
+    let mut stats = EventLoadStats::default();
+    for (idx, event) in session.events.into_iter().enumerate() {
+        if let Err(err) = apply_event(&symbol, book, &asset, event, idx as i64, &mut stats) {
+            stats.rejected_events += 1;
+            stats.errors.push(format!("Event {}: {}", idx, err));
+        }
+    }
+
+    drop(books_guard);
+
+    let response = RunSimulationToEndResponse {
+        sim_id,
+        symbol,
+        applied_events: stats.applied_events,
+        rejected_events: stats.rejected_events,
+        generated_order_ids: stats.generated_order_ids,
+        last_timestamp: stats.last_timestamp,
+        errors: stats.errors,
+    };
+
+    HttpResponse::Ok().json(response)
+}
+
 fn ensure_parent_dir(path: &str) -> std::io::Result<()> {
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
@@ -728,4 +931,199 @@ fn trade_to_dto(trade: Trade) -> TradeDto {
         maker_order_id,
         timestamp,
     }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum RawEvent {
+    #[serde(rename_all = "camelCase")]
+    Limit {
+        #[serde(alias = "order_id")]
+        order_id: Option<String>,
+        side: String,
+        price: String,
+        quantity: String,
+        tif: Option<String>,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Market {
+        #[serde(alias = "order_id")]
+        order_id: Option<String>,
+        side: String,
+        quantity: String,
+        tif: Option<String>,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Cancel {
+        #[serde(alias = "order_id")]
+        order_id: String,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Modify {
+        #[serde(alias = "order_id")]
+        order_id: String,
+        #[serde(alias = "new_price")]
+        new_price: String,
+        #[serde(alias = "new_quantity")]
+        new_quantity: String,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+}
+
+#[derive(Clone)]
+struct SimulationSession {
+    symbol: String,
+    events: Vec<RawEvent>,
+}
+
+#[derive(Default)]
+struct EventLoadStats {
+    applied_events: usize,
+    rejected_events: usize,
+    generated_order_ids: Vec<String>,
+    last_timestamp: Option<i64>,
+    errors: Vec<String>,
+}
+
+fn apply_event(
+    expected_symbol: &str,
+    book: &mut OrderBook,
+    asset: &Arc<dyn TradableAsset>,
+    event: RawEvent,
+    fallback_timestamp: i64,
+    stats: &mut EventLoadStats,
+) -> Result<(), String> {
+    match event {
+        RawEvent::Limit {
+            order_id,
+            side,
+            price,
+            quantity,
+            tif,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            let side =
+                parse_side(&side).ok_or_else(|| "Invalid side in limit event".to_string())?;
+            let tif_str = tif.unwrap_or_else(|| "GTC".to_string());
+            let tif =
+                parse_tif(&tif_str).ok_or_else(|| "Invalid TIF in limit event".to_string())?;
+            let price = Decimal::from_str(&price)
+                .map_err(|_| "Invalid price in limit event".to_string())?;
+            if price <= Decimal::ZERO {
+                return Err("Price must be positive in limit event".to_string());
+            }
+            let quantity = Decimal::from_str(&quantity)
+                .map_err(|_| "Invalid quantity in limit event".to_string())?;
+            if quantity <= Decimal::ZERO {
+                return Err("Quantity must be positive in limit event".to_string());
+            }
+
+            let ts = timestamp.unwrap_or(fallback_timestamp);
+            stats.last_timestamp = Some(ts);
+
+            let order_id = order_id
+                .unwrap_or_else(|| format!("evt-limit-{}-{}", expected_symbol, Uuid::new_v4()));
+            let order = LimitOrder::new(
+                order_id.clone(),
+                asset.clone(),
+                side,
+                quantity,
+                ts,
+                tif,
+                price,
+            );
+            book.add_limit_order(order);
+            stats.applied_events += 1;
+            stats.generated_order_ids.push(order_id);
+            Ok(())
+        }
+        RawEvent::Market {
+            order_id,
+            side,
+            quantity,
+            tif,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            let side =
+                parse_side(&side).ok_or_else(|| "Invalid side in market event".to_string())?;
+            let tif_str = tif.unwrap_or_else(|| "IOC".to_string());
+            let tif =
+                parse_tif(&tif_str).ok_or_else(|| "Invalid TIF in market event".to_string())?;
+            let quantity = Decimal::from_str(&quantity)
+                .map_err(|_| "Invalid quantity in market event".to_string())?;
+            if quantity <= Decimal::ZERO {
+                return Err("Quantity must be positive in market event".to_string());
+            }
+
+            let ts = timestamp.unwrap_or(fallback_timestamp);
+            stats.last_timestamp = Some(ts);
+
+            let order_id = order_id
+                .unwrap_or_else(|| format!("evt-market-{}-{}", expected_symbol, Uuid::new_v4()));
+            let order = MarketOrder::new(order_id, asset.clone(), side, quantity, ts, tif);
+            book.add_market_order(order);
+            stats.applied_events += 1;
+            Ok(())
+        }
+        RawEvent::Cancel {
+            order_id,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            stats.last_timestamp = timestamp.or(stats.last_timestamp);
+            if book.cancel_order(&order_id) {
+                stats.applied_events += 1;
+                Ok(())
+            } else {
+                Err("Cancel event referenced unknown order".to_string())
+            }
+        }
+        RawEvent::Modify {
+            order_id,
+            new_price,
+            new_quantity,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            let price = Decimal::from_str(&new_price)
+                .map_err(|_| "Invalid price in modify event".to_string())?;
+            if price <= Decimal::ZERO {
+                return Err("Price must be positive in modify event".to_string());
+            }
+            let quantity = Decimal::from_str(&new_quantity)
+                .map_err(|_| "Invalid quantity in modify event".to_string())?;
+            if quantity <= Decimal::ZERO {
+                return Err("Quantity must be positive in modify event".to_string());
+            }
+            stats.last_timestamp = timestamp.or(stats.last_timestamp);
+            if book.modify_order(&order_id, price, quantity) {
+                stats.applied_events += 1;
+                Ok(())
+            } else {
+                Err("Modify event failed to update order".to_string())
+            }
+        }
+    }
+}
+
+fn enforce_symbol(expected: &str, provided: Option<&str>) -> Result<(), String> {
+    if let Some(actual) = provided {
+        if !actual.trim().eq_ignore_ascii_case(expected) {
+            return Err("Event symbol did not match target symbol".to_string());
+        }
+    }
+    Ok(())
 }
