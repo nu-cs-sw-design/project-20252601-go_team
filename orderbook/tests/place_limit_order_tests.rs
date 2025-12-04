@@ -138,3 +138,53 @@ async fn place_limit_order_rejects_invalid_side() {
     let response = test::call_service(&app, bad_request).await;
     assert_eq!(response.status(), actix_web::http::StatusCode::BAD_REQUEST);
 }
+
+#[actix_web::test]
+async fn place_limit_order_rejects_empty_symbol() {
+    let app = test::init_service(
+        App::new().route("/place_limit_order", web::post().to(place_limit_order)),
+    )
+    .await;
+
+    let request = test::TestRequest::post()
+        .uri("/place_limit_order")
+        .set_json(json!({
+            "symbol": "   ",
+            "side": "BUY",
+            "price": "10.00",
+            "quantity": "1",
+            "tif": "GTC"
+        }))
+        .to_request();
+
+    let response = test::call_service(&app, request).await;
+    assert_eq!(response.status(), actix_web::http::StatusCode::BAD_REQUEST);
+}
+
+#[actix_web::test]
+async fn place_limit_order_trims_symbol_whitespace() {
+    let app = test::init_service(
+        App::new().route("/place_limit_order", web::post().to(place_limit_order)),
+    )
+    .await;
+
+    let request = test::TestRequest::post()
+        .uri("/place_limit_order")
+        .set_json(json!({
+            "symbol": "  TRIM-SYM  ",
+            "side": "SELL",
+            "price": "42.00",
+            "quantity": "2",
+            "tif": "GTC"
+        }))
+        .to_request();
+
+    let response = test::call_service(&app, request).await;
+    assert!(response.status().is_success());
+
+    let payload: PlaceLimitOrderResponse = test::read_body_json(response).await;
+    assert!(payload.order_id.starts_with("ord-TRIM-SYM-"));
+
+    let resting = payload.resting_order.expect("expected resting order");
+    assert_eq!(resting.symbol, "TRIM-SYM");
+}

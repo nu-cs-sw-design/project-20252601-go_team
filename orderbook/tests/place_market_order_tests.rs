@@ -4,6 +4,7 @@ use orderbook::controller::controller::{
 };
 use rust_decimal::Decimal;
 use serde_json::json;
+use std::collections::HashSet;
 
 #[actix_web::test]
 async fn market_order_executes_available_liquidity() {
@@ -114,4 +115,59 @@ async fn market_order_fok_rejects_without_liquidity() {
     assert_eq!(payload.executed_quantity, Decimal::new(0, 0));
     assert!(payload.trades.is_empty());
     assert!(!payload.fully_filled);
+}
+
+#[actix_web::test]
+async fn market_order_rejects_empty_symbol() {
+    let app = test::init_service(
+        App::new().route("/place_market_order", web::post().to(place_market_order)),
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/place_market_order")
+        .set_json(json!({
+            "symbol": " ",
+            "side": "BUY",
+            "quantity": "1",
+            "tif": "IOC"
+        }))
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), actix_web::http::StatusCode::BAD_REQUEST);
+}
+
+#[actix_web::test]
+async fn market_orders_generate_unique_order_ids() {
+    let app = test::init_service(
+        App::new().route("/place_market_order", web::post().to(place_market_order)),
+    )
+    .await;
+
+    let mut ids = HashSet::new();
+
+    for _ in 0..2 {
+        let req = test::TestRequest::post()
+            .uri("/place_market_order")
+            .set_json(json!({
+                "symbol": "MKT-UNIQ",
+                "side": "BUY",
+                "quantity": "1",
+                "tif": "IOC"
+            }))
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
+
+        let payload: PlaceMarketOrderResponse = test::read_body_json(resp).await;
+        ids.insert(payload.order_id);
+    }
+
+    assert_eq!(
+        ids.len(),
+        2,
+        "expected unique order IDs for rapid submissions"
+    );
 }
