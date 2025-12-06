@@ -1,5 +1,4 @@
 @startuml
-
 package Model {
 
     +enum Side {

@@ -1,14 +1,35 @@
 use actix_web::{web, HttpResponse, Responder};
-use serde::{Deserialize, Serialize};
 use rust_decimal::Decimal;
-use std::sync::Arc;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
+use std::str::FromStr;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
 
-use crate::model::{Side, TimeInForce, Stock, LimitOrder, MarketOrder};
+use crate::model::{
+    CsvDataExporter, DataExporter, LimitOrder, MarketOrder, Order, OrderBook, Side, Stock,
+    TimeInForce, TradableAsset, Trade,
+};
+
+// Global registry of order books keyed by symbol.
+static ORDER_BOOKS: OnceLock<Mutex<HashMap<String, OrderBook>>> = OnceLock::new();
+
+fn order_books() -> &'static Mutex<HashMap<String, OrderBook>> {
+    ORDER_BOOKS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+static SIMULATION_SESSIONS: OnceLock<Mutex<HashMap<String, SimulationSession>>> = OnceLock::new();
+
+fn simulation_sessions() -> &'static Mutex<HashMap<String, SimulationSession>> {
+    SIMULATION_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 // --- DTOs for Responses ---
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TradeDto {
     pub trade_id: String,
     pub symbol: String,
@@ -19,7 +40,7 @@ pub struct TradeDto {
     pub timestamp: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OrderDto {
     pub order_id: String,
     pub symbol: String,
@@ -30,6 +51,22 @@ pub struct OrderDto {
     pub tif: String,
     pub timestamp: i64,
     pub type_: String, // "LIMIT" or "MARKET"
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlaceLimitOrderResponse {
+    pub order_id: String,
+    pub trades: Vec<TradeDto>,
+    pub resting_order: Option<OrderDto>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PlaceMarketOrderResponse {
+    pub order_id: String,
+    pub trades: Vec<TradeDto>,
+    pub executed_quantity: Decimal,
+    pub fully_filled: bool,
+    pub tif: String,
 }
 
 // --- Request Structs ---
@@ -94,6 +131,47 @@ pub struct ExportRequest {
     pub path: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExportResponse {
+    pub exported: bool,
+    pub path: String,
+    pub count: usize,
+}
+
+#[derive(Deserialize)]
+pub struct LoadEventStreamRequest {
+    pub path: String,
+    pub symbol: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoadEventStreamResponse {
+    pub symbol: String,
+    pub applied_events: usize,
+    pub rejected_events: usize,
+    pub generated_order_ids: Vec<String>,
+    pub last_timestamp: Option<i64>,
+    pub errors: Vec<String>,
+    pub simulation_id: String,
+}
+
+#[derive(Deserialize)]
+pub struct RunSimulationToEndRequest {
+    #[serde(rename = "simId", alias = "sim_id")]
+    pub sim_id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct RunSimulationToEndResponse {
+    pub sim_id: String,
+    pub symbol: String,
+    pub applied_events: usize,
+    pub rejected_events: usize,
+    pub generated_order_ids: Vec<String>,
+    pub last_timestamp: Option<i64>,
+    pub errors: Vec<String>,
+}
+
 // --- Handlers ---
 
 pub async fn health(body: String) -> impl Responder {
@@ -104,35 +182,52 @@ pub async fn health(body: String) -> impl Responder {
 pub async fn place_limit_order(req: web::Json<PlaceLimitOrderRequest>) -> impl Responder {
     println!("--- Placing Limit Order ---");
 
+    let raw_symbol = req.symbol.trim();
+    if raw_symbol.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol must be provided");
+    }
+    let symbol = raw_symbol.to_string();
+
     // 1. Parse Side Enum
-    let side: Side = match req.side.to_uppercase().as_str() {
-        "BUY" => Side::BUY,
-        "SELL" => Side::SELL,
-        _ => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
+    let side = match parse_side(&req.side) {
+        Some(side) => side,
+        None => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
     };
 
     // 2. Parse TimeInForce Enum
-    let tif: TimeInForce = match req.tif.to_uppercase().as_str() {
-        "GTC" => TimeInForce::GTC,
-        "IOC" => TimeInForce::IOC,
-        "FOK" => TimeInForce::FOK,
-        _ => return HttpResponse::BadRequest().body("Invalid TIF. Must be GTC, IOC, or FOK"),
+    let tif = match parse_tif(&req.tif) {
+        Some(tif) => tif,
+        None => {
+            return HttpResponse::BadRequest().body("Invalid TIF. Must be GTC, IOC, or FOK");
+        }
     };
 
+    if req.quantity <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("Quantity must be positive");
+    }
+
+    if req.price <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("Price must be positive");
+    }
+
     // 3. Create Asset (Mocking lookup since we don't have the simulator state here)
-    let asset: Arc<Stock> = Arc::new(Stock::new(String::from(&req.symbol), String::from("Unknown Name"), String::from("Created via API")));
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        symbol.clone(),
+        String::from("Unknown Name"),
+        String::from("Created via API"),
+    ));
 
     // 4. Generate Metadata
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs() as i64;
-    let order_id = format!("ord-{}-{}", req.symbol, timestamp);
+    let order_id = format!("ord-{}-{}-{}", symbol, timestamp, Uuid::new_v4());
 
     // 5. Instantiate the actual Domain Object
     let order = LimitOrder::new(
         order_id.clone(),
-        asset,
+        asset.clone(),
         side,
         req.quantity,
         timestamp,
@@ -142,41 +237,151 @@ pub async fn place_limit_order(req: web::Json<PlaceLimitOrderRequest>) -> impl R
 
     println!("Successfully created internal order object:");
     println!("{:#?}", order);
-    
-    // TODO: Add order to OrderBook via Model/Simulator
 
-    HttpResponse::Ok().body(order_id)
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    let trades = book.add_limit_order(order);
+    let resting_order = book.get_order(&order_id).map(limit_order_to_dto);
+
+    drop(books_guard);
+
+    let trade_dtos: Vec<TradeDto> = trades.into_iter().map(trade_to_dto).collect();
+
+    let response = PlaceLimitOrderResponse {
+        order_id,
+        trades: trade_dtos,
+        resting_order,
+    };
+
+    HttpResponse::Ok().json(response)
 }
 
 pub async fn place_market_order(req: web::Json<PlaceMarketOrderRequest>) -> impl Responder {
     println!("--- Placing Market Order ---");
-    println!("Symbol: {}, Side: {}, Qty: {}, TIF: {}", req.symbol, req.side, req.quantity, req.tif);
+    println!(
+        "Symbol: {}, Side: {}, Qty: {}, TIF: {}",
+        req.symbol, req.side, req.quantity, req.tif
+    );
 
-    // Mocking logic
-    // TODO: Call model to place market order and get trades
+    let raw_symbol = req.symbol.trim();
+    if raw_symbol.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol must be provided");
+    }
+    let symbol = raw_symbol.to_string();
 
-    let trades = vec![
-        TradeDto {
-            trade_id: "trade-1".to_string(),
-            symbol: req.symbol.clone(),
-            price: Decimal::new(100, 0),
-            quantity: req.quantity,
-            taker_order_id: "taker-1".to_string(),
-            maker_order_id: "maker-1".to_string(),
-            timestamp: 1234567890,
+    let side = match parse_side(&req.side) {
+        Some(side) => side,
+        None => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
+    };
+
+    if req.quantity <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("Quantity must be positive");
+    }
+
+    let tif = match parse_tif(&req.tif) {
+        Some(TimeInForce::GTC) => {
+            println!("Market order received with GTC TIF; coercing to IOC");
+            TimeInForce::IOC
         }
-    ];
+        Some(tif) => tif,
+        None => return HttpResponse::BadRequest().body("Invalid TIF. Must be GTC, IOC, or FOK"),
+    };
 
-    println!("Market Order placed. Trades generated: {}", trades.len());
-    HttpResponse::Ok().json(trades)
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        symbol.clone(),
+        String::from("Unknown Name"),
+        String::from("Created via API"),
+    ));
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let order_id = format!("mkt-{}-{}-{}", symbol, timestamp, Uuid::new_v4());
+
+    let market_order = MarketOrder::new(
+        order_id.clone(),
+        asset.clone(),
+        side,
+        req.quantity,
+        timestamp,
+        tif,
+    );
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    let trades = book.add_market_order(market_order);
+    let executed_quantity = trades
+        .iter()
+        .fold(Decimal::ZERO, |acc, trade| acc + trade.quantity);
+
+    drop(books_guard);
+
+    let trade_dtos: Vec<TradeDto> = trades.into_iter().map(trade_to_dto).collect();
+
+    let response = PlaceMarketOrderResponse {
+        order_id,
+        trades: trade_dtos,
+        executed_quantity,
+        fully_filled: executed_quantity >= req.quantity,
+        tif: tif_to_string(tif).to_string(),
+    };
+
+    println!(
+        "Market Order placed. Trades generated: {}, Executed Qty: {}",
+        response.trades.len(),
+        response.executed_quantity
+    );
+    HttpResponse::Ok().json(response)
 }
 
 pub async fn cancel_order(req: web::Json<CancelOrderRequest>) -> impl Responder {
     println!("--- Cancelling Order ---");
     println!("Symbol: {}, OrderID: {}", req.symbol, req.order_id);
+    let raw_symbol = req.symbol.trim();
+    let raw_order_id = req.order_id.trim();
+    if raw_symbol.is_empty() || raw_order_id.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and order_id must be provided");
+    }
 
-    // TODO: Call model to cancel order
-    let success = true;
+    let symbol = raw_symbol.to_string();
+    let order_id = raw_order_id.to_string();
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let success = books_guard
+        .get_mut(&symbol)
+        .map(|book| book.cancel_order(order_id.as_str()))
+        .unwrap_or(false);
 
     println!("Order cancelled status: {}", success);
     HttpResponse::Ok().json(success)
@@ -184,10 +389,41 @@ pub async fn cancel_order(req: web::Json<CancelOrderRequest>) -> impl Responder 
 
 pub async fn modify_order(req: web::Json<ModifyOrderRequest>) -> impl Responder {
     println!("--- Modifying Order ---");
-    println!("Symbol: {}, OrderID: {}, NewPrice: {}, NewQty: {}", req.symbol, req.order_id, req.new_price, req.new_quantity);
+    println!(
+        "Symbol: {}, OrderID: {}, NewPrice: {}, NewQty: {}",
+        req.symbol, req.order_id, req.new_price, req.new_quantity
+    );
 
-    // TODO: Call model to modify order
-    let success = true;
+    let raw_symbol = req.symbol.trim();
+    let raw_order_id = req.order_id.trim();
+    if raw_symbol.is_empty() || raw_order_id.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and order_id must be provided");
+    }
+
+    if req.new_price <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("New price must be positive");
+    }
+
+    if req.new_quantity <= Decimal::ZERO {
+        return HttpResponse::BadRequest().body("New quantity must be positive");
+    }
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let symbol = raw_symbol.to_string();
+    let order_id = raw_order_id.to_string();
+
+    let success = books_guard
+        .get_mut(&symbol)
+        .map(|book| book.modify_order(order_id.as_str(), req.new_price, req.new_quantity))
+        .unwrap_or(false);
 
     println!("Order modified status: {}", success);
     HttpResponse::Ok().json(success)
@@ -197,19 +433,37 @@ pub async fn get_order(info: web::Query<GetOrderRequest>) -> impl Responder {
     println!("--- Get Order ---");
     println!("Symbol: {}, OrderID: {}", info.symbol, info.order_id);
 
-    // TODO: Fetch order from model
-    
-    let order_dto = OrderDto {
-        order_id: info.order_id.clone(),
-        symbol: info.symbol.clone(),
-        side: "BUY".to_string(),
-        quantity: Decimal::new(10, 0),
-        remaining_quantity: Decimal::new(5, 0),
-        price: Some(Decimal::new(150, 0)),
-        tif: "GTC".to_string(),
-        timestamp: 1234567890,
-        type_: "LIMIT".to_string(),
+    let raw_symbol = info.symbol.trim();
+    let raw_order_id = info.order_id.trim();
+    if raw_symbol.is_empty() || raw_order_id.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and order_id must be provided");
+    }
+
+    let symbol = raw_symbol.to_string();
+    let order_id = raw_order_id.to_string();
+
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
     };
+
+    let book = match books_guard.get(&symbol) {
+        Some(book) => book,
+        None => {
+            return HttpResponse::NotFound().body("Order book for symbol not found");
+        }
+    };
+
+    let order = match book.get_order(&order_id) {
+        Some(order) => order,
+        None => return HttpResponse::NotFound().body("Order not found"),
+    };
+
+    let order_dto = limit_order_to_dto(order);
 
     println!("Order found: {:?}", order_dto.order_id);
     HttpResponse::Ok().json(order_dto)
@@ -219,21 +473,39 @@ pub async fn get_open_orders(info: web::Query<GetOpenOrdersRequest>) -> impl Res
     println!("--- Get Open Orders ---");
     println!("Symbol: {}, Side: {}", info.symbol, info.side);
 
-    // TODO: Fetch open orders from model
+    let side = match parse_side(&info.side) {
+        Some(side) => side,
+        None => return HttpResponse::BadRequest().body("Invalid side. Must be BUY or SELL"),
+    };
 
-    let orders = vec![
-        OrderDto {
-            order_id: "ord-1".to_string(),
-            symbol: info.symbol.clone(),
-            side: info.side.clone(),
-            quantity: Decimal::new(10, 0),
-            remaining_quantity: Decimal::new(10, 0),
-            price: Some(Decimal::new(150, 0)),
-            tif: "GTC".to_string(),
-            timestamp: 1234567890,
-            type_: "LIMIT".to_string(),
+    let raw_symbol = info.symbol.trim();
+    if raw_symbol.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol must be provided");
+    }
+
+    let symbol = raw_symbol.to_string();
+
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
         }
-    ];
+    };
+
+    let book = match books_guard.get(&symbol) {
+        Some(book) => book,
+        None => {
+            return HttpResponse::NotFound().body("Order book for symbol not found");
+        }
+    };
+
+    let orders: Vec<OrderDto> = book
+        .get_open_orders(side)
+        .into_iter()
+        .map(limit_order_to_dto)
+        .collect();
 
     println!("Open orders count: {}", orders.len());
     HttpResponse::Ok().json(orders)
@@ -243,29 +515,70 @@ pub async fn reset_book(req: web::Json<ResetBookRequest>) -> impl Responder {
     println!("--- Reset Book ---");
     println!("Symbol: {}", req.symbol);
 
-    // TODO: Call model to reset book
+    let raw_symbol = req.symbol.trim();
+    if raw_symbol.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol must be provided");
+    }
 
-    println!("Book reset for symbol: {}", req.symbol);
-    HttpResponse::Ok().finish()
+    let symbol = raw_symbol.to_string();
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let reset_performed = books_guard
+        .get_mut(&symbol)
+        .map(|book| {
+            book.reset();
+            true
+        })
+        .unwrap_or(false);
+
+    println!("Book reset performed: {}", reset_performed);
+    HttpResponse::Ok().json(reset_performed)
 }
 
 pub async fn get_recent_trades(info: web::Query<GetRecentTradesRequest>) -> impl Responder {
     println!("--- Get Recent Trades ---");
     println!("Symbol: {}, Limit: {}", info.symbol, info.limit);
 
-    // TODO: Fetch recent trades from model
+    let raw_symbol = info.symbol.trim();
+    if raw_symbol.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol must be provided");
+    }
 
-    let trades = vec![
-        TradeDto {
-            trade_id: "trade-recent-1".to_string(),
-            symbol: info.symbol.clone(),
-            price: Decimal::new(100, 0),
-            quantity: Decimal::new(5, 0),
-            taker_order_id: "taker-1".to_string(),
-            maker_order_id: "maker-1".to_string(),
-            timestamp: 1234567890,
+    let symbol = raw_symbol.to_string();
+
+    let limit = if info.limit <= 0 {
+        0
+    } else {
+        info.limit as usize
+    };
+
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
         }
-    ];
+    };
+
+    let book = match books_guard.get(&symbol) {
+        Some(book) => book,
+        None => return HttpResponse::NotFound().body("Order book for symbol not found"),
+    };
+
+    let trades: Vec<TradeDto> = book
+        .get_recent_trades(limit)
+        .into_iter()
+        .map(trade_to_dto)
+        .collect();
 
     println!("Recent trades returned: {}", trades.len());
     HttpResponse::Ok().json(trades)
@@ -275,18 +588,542 @@ pub async fn export_trades(req: web::Json<ExportRequest>) -> impl Responder {
     println!("--- Export Trades ---");
     println!("Symbol: {}, Path: {}", req.symbol, req.path);
 
-    // TODO: Call model to export trades
+    let raw_symbol = req.symbol.trim();
+    let raw_path = req.path.trim();
+    if raw_symbol.is_empty() || raw_path.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and path must be provided");
+    }
 
-    println!("Trades exported to: {}", req.path);
-    HttpResponse::Ok().finish()
+    let symbol = raw_symbol.to_string();
+    let export_path = raw_path.to_string();
+
+    if let Err(err) = ensure_parent_dir(&export_path) {
+        eprintln!("Failed to prepare export directory: {}", err);
+        return HttpResponse::InternalServerError().body("Failed to prepare export directory");
+    }
+
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = match books_guard.get(&symbol) {
+        Some(book) => book,
+        None => return HttpResponse::NotFound().body("Order book for symbol not found"),
+    };
+
+    let trades = book.get_recent_trades(usize::MAX);
+    drop(books_guard);
+
+    let exporter = CsvDataExporter::new();
+    if let Err(err) = exporter.export_trades(&trades, &export_path) {
+        eprintln!("Failed to export trades: {}", err);
+        return HttpResponse::InternalServerError().body("Failed to export trades");
+    }
+
+    let response = ExportResponse {
+        exported: true,
+        path: export_path.clone(),
+        count: trades.len(),
+    };
+
+    println!(
+        "Trades exported to: {} ({} records)",
+        response.path, response.count
+    );
+    HttpResponse::Ok().json(response)
 }
 
 pub async fn export_book_history(req: web::Json<ExportRequest>) -> impl Responder {
     println!("--- Export Book History ---");
     println!("Symbol: {}, Path: {}", req.symbol, req.path);
 
-    // TODO: Call model to export book history
+    let raw_symbol = req.symbol.trim();
+    let raw_path = req.path.trim();
+    if raw_symbol.is_empty() || raw_path.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and path must be provided");
+    }
 
-    println!("Book history exported to: {}", req.path);
-    HttpResponse::Ok().finish()
+    let symbol = raw_symbol.to_string();
+    let export_path = raw_path.to_string();
+
+    if let Err(err) = ensure_parent_dir(&export_path) {
+        eprintln!("Failed to prepare export directory: {}", err);
+        return HttpResponse::InternalServerError().body("Failed to prepare export directory");
+    }
+
+    let books = order_books();
+    let books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = match books_guard.get(&symbol) {
+        Some(book) => book,
+        None => return HttpResponse::NotFound().body("Order book for symbol not found"),
+    };
+
+    let snapshot = book.get_snapshot();
+    let history = vec![snapshot];
+    drop(books_guard);
+
+    let exporter = CsvDataExporter::new();
+    if let Err(err) = exporter.export_book_history(&history, &export_path) {
+        eprintln!("Failed to export book history: {}", err);
+        return HttpResponse::InternalServerError().body("Failed to export book history");
+    }
+
+    let response = ExportResponse {
+        exported: true,
+        path: export_path.clone(),
+        count: history.len(),
+    };
+
+    println!(
+        "Book history exported to: {} ({} snapshots)",
+        response.path, response.count
+    );
+    HttpResponse::Ok().json(response)
+}
+
+pub async fn load_event_stream(req: web::Json<LoadEventStreamRequest>) -> impl Responder {
+    println!("--- Load Event Stream ---");
+    println!("Symbol: {}, Path: {}", req.symbol, req.path);
+
+    let raw_symbol = req.symbol.trim();
+    let raw_path = req.path.trim();
+    if raw_symbol.is_empty() || raw_path.is_empty() {
+        return HttpResponse::BadRequest().body("Symbol and path must be provided");
+    }
+
+    let symbol = raw_symbol.to_string();
+    let path = raw_path.to_string();
+
+    let contents = match fs::read_to_string(&path) {
+        Ok(data) => data,
+        Err(err) => {
+            eprintln!("Failed to read event stream: {}", err);
+            return HttpResponse::BadRequest().body("Unable to read event stream file");
+        }
+    };
+
+    let events: Vec<RawEvent> = match serde_json::from_str(&contents) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            eprintln!("Failed to parse event stream JSON: {}", err);
+            return HttpResponse::BadRequest().body("Invalid event stream format");
+        }
+    };
+
+    let simulation_id = format!("sim-{}", Uuid::new_v4());
+    {
+        let sessions = simulation_sessions();
+        let mut sessions_guard = match sessions.lock() {
+            Ok(guard) => guard,
+            Err(err) => {
+                eprintln!("Failed to lock simulation registry: {}", err);
+                return HttpResponse::InternalServerError().body("Simulation registry unavailable");
+            }
+        };
+
+        sessions_guard.insert(
+            simulation_id.clone(),
+            SimulationSession {
+                symbol: symbol.clone(),
+                events: events.clone(),
+            },
+        );
+    }
+
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        symbol.clone(),
+        String::from("Unknown Name"),
+        String::from("Created via event stream"),
+    ));
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    let mut stats = EventLoadStats::default();
+    for (idx, event) in events.into_iter().enumerate() {
+        if let Err(err) = apply_event(&symbol, book, &asset, event, idx as i64, &mut stats) {
+            stats.rejected_events += 1;
+            stats.errors.push(format!("Event {}: {}", idx, err));
+        }
+    }
+
+    let response = LoadEventStreamResponse {
+        symbol,
+        applied_events: stats.applied_events,
+        rejected_events: stats.rejected_events,
+        generated_order_ids: stats.generated_order_ids,
+        last_timestamp: stats.last_timestamp,
+        errors: stats.errors,
+        simulation_id,
+    };
+
+    HttpResponse::Ok().json(response)
+}
+
+pub async fn run_simulation_to_end(req: web::Json<RunSimulationToEndRequest>) -> impl Responder {
+    println!("--- Run Simulation To End ---");
+    println!("SimId: {}", req.sim_id);
+
+    let raw_sim_id = req.sim_id.trim();
+    if raw_sim_id.is_empty() {
+        return HttpResponse::BadRequest().body("Simulation ID must be provided");
+    }
+
+    let sim_id = raw_sim_id.to_string();
+
+    let sessions = simulation_sessions();
+    let sessions_guard = match sessions.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock simulation registry: {}", err);
+            return HttpResponse::InternalServerError().body("Simulation registry unavailable");
+        }
+    };
+
+    let session = match sessions_guard.get(&sim_id) {
+        Some(session) => session.clone(),
+        None => return HttpResponse::NotFound().body("Simulation not found"),
+    };
+    drop(sessions_guard);
+
+    let symbol = session.symbol.clone();
+
+    let asset: Arc<dyn TradableAsset> = Arc::new(Stock::new(
+        symbol.clone(),
+        String::from("Unknown Name"),
+        String::from("Created via simulation"),
+    ));
+
+    let books = order_books();
+    let mut books_guard = match books.lock() {
+        Ok(guard) => guard,
+        Err(err) => {
+            eprintln!("Failed to lock order book registry: {}", err);
+            return HttpResponse::InternalServerError().body("Order book unavailable");
+        }
+    };
+
+    let book = books_guard
+        .entry(symbol.clone())
+        .or_insert_with(|| OrderBook::new(asset.clone()));
+
+    book.reset();
+
+    let mut stats = EventLoadStats::default();
+    for (idx, event) in session.events.into_iter().enumerate() {
+        if let Err(err) = apply_event(&symbol, book, &asset, event, idx as i64, &mut stats) {
+            stats.rejected_events += 1;
+            stats.errors.push(format!("Event {}: {}", idx, err));
+        }
+    }
+
+    drop(books_guard);
+
+    let response = RunSimulationToEndResponse {
+        sim_id,
+        symbol,
+        applied_events: stats.applied_events,
+        rejected_events: stats.rejected_events,
+        generated_order_ids: stats.generated_order_ids,
+        last_timestamp: stats.last_timestamp,
+        errors: stats.errors,
+    };
+
+    HttpResponse::Ok().json(response)
+}
+
+fn ensure_parent_dir(path: &str) -> std::io::Result<()> {
+    if let Some(parent) = Path::new(path).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+    Ok(())
+}
+
+fn parse_side(input: &str) -> Option<Side> {
+    match input.trim().to_ascii_uppercase().as_str() {
+        "BUY" => Some(Side::BUY),
+        "SELL" => Some(Side::SELL),
+        _ => None,
+    }
+}
+
+fn parse_tif(input: &str) -> Option<TimeInForce> {
+    match input.trim().to_ascii_uppercase().as_str() {
+        "GTC" => Some(TimeInForce::GTC),
+        "IOC" => Some(TimeInForce::IOC),
+        "FOK" => Some(TimeInForce::FOK),
+        _ => None,
+    }
+}
+
+fn side_to_string(side: Side) -> &'static str {
+    match side {
+        Side::BUY => "BUY",
+        Side::SELL => "SELL",
+    }
+}
+
+fn tif_to_string(tif: TimeInForce) -> &'static str {
+    match tif {
+        TimeInForce::GTC => "GTC",
+        TimeInForce::IOC => "IOC",
+        TimeInForce::FOK => "FOK",
+    }
+}
+
+fn limit_order_to_dto(order: &LimitOrder) -> OrderDto {
+    OrderDto {
+        order_id: order.order_id().to_string(),
+        symbol: order.asset().ticker().to_string(),
+        side: side_to_string(order.side()).to_string(),
+        quantity: order.quantity(),
+        remaining_quantity: order.remaining_quantity(),
+        price: Some(order.price()),
+        tif: tif_to_string(order.tif()).to_string(),
+        timestamp: order.timestamp(),
+        type_: "LIMIT".to_string(),
+    }
+}
+
+fn trade_to_dto(trade: Trade) -> TradeDto {
+    let Trade {
+        trade_id,
+        asset,
+        price,
+        quantity,
+        taker_order_id,
+        maker_order_id,
+        timestamp,
+    } = trade;
+
+    let symbol = asset.ticker().to_string();
+
+    TradeDto {
+        trade_id,
+        symbol,
+        price,
+        quantity,
+        taker_order_id,
+        maker_order_id,
+        timestamp,
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+enum RawEvent {
+    #[serde(rename_all = "camelCase")]
+    Limit {
+        #[serde(alias = "order_id")]
+        order_id: Option<String>,
+        side: String,
+        price: String,
+        quantity: String,
+        tif: Option<String>,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Market {
+        #[serde(alias = "order_id")]
+        order_id: Option<String>,
+        side: String,
+        quantity: String,
+        tif: Option<String>,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Cancel {
+        #[serde(alias = "order_id")]
+        order_id: String,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Modify {
+        #[serde(alias = "order_id")]
+        order_id: String,
+        #[serde(alias = "new_price")]
+        new_price: String,
+        #[serde(alias = "new_quantity")]
+        new_quantity: String,
+        timestamp: Option<i64>,
+        symbol: Option<String>,
+    },
+}
+
+#[derive(Clone)]
+struct SimulationSession {
+    symbol: String,
+    events: Vec<RawEvent>,
+}
+
+#[derive(Default)]
+struct EventLoadStats {
+    applied_events: usize,
+    rejected_events: usize,
+    generated_order_ids: Vec<String>,
+    last_timestamp: Option<i64>,
+    errors: Vec<String>,
+}
+
+fn apply_event(
+    expected_symbol: &str,
+    book: &mut OrderBook,
+    asset: &Arc<dyn TradableAsset>,
+    event: RawEvent,
+    fallback_timestamp: i64,
+    stats: &mut EventLoadStats,
+) -> Result<(), String> {
+    match event {
+        RawEvent::Limit {
+            order_id,
+            side,
+            price,
+            quantity,
+            tif,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            let side =
+                parse_side(&side).ok_or_else(|| "Invalid side in limit event".to_string())?;
+            let tif_str = tif.unwrap_or_else(|| "GTC".to_string());
+            let tif =
+                parse_tif(&tif_str).ok_or_else(|| "Invalid TIF in limit event".to_string())?;
+            let price = Decimal::from_str(&price)
+                .map_err(|_| "Invalid price in limit event".to_string())?;
+            if price <= Decimal::ZERO {
+                return Err("Price must be positive in limit event".to_string());
+            }
+            let quantity = Decimal::from_str(&quantity)
+                .map_err(|_| "Invalid quantity in limit event".to_string())?;
+            if quantity <= Decimal::ZERO {
+                return Err("Quantity must be positive in limit event".to_string());
+            }
+
+            let ts = timestamp.unwrap_or(fallback_timestamp);
+            stats.last_timestamp = Some(ts);
+
+            let order_id = order_id
+                .unwrap_or_else(|| format!("evt-limit-{}-{}", expected_symbol, Uuid::new_v4()));
+            let order = LimitOrder::new(
+                order_id.clone(),
+                asset.clone(),
+                side,
+                quantity,
+                ts,
+                tif,
+                price,
+            );
+            book.add_limit_order(order);
+            stats.applied_events += 1;
+            stats.generated_order_ids.push(order_id);
+            Ok(())
+        }
+        RawEvent::Market {
+            order_id,
+            side,
+            quantity,
+            tif,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            let side =
+                parse_side(&side).ok_or_else(|| "Invalid side in market event".to_string())?;
+            let tif_str = tif.unwrap_or_else(|| "IOC".to_string());
+            let tif =
+                parse_tif(&tif_str).ok_or_else(|| "Invalid TIF in market event".to_string())?;
+            let quantity = Decimal::from_str(&quantity)
+                .map_err(|_| "Invalid quantity in market event".to_string())?;
+            if quantity <= Decimal::ZERO {
+                return Err("Quantity must be positive in market event".to_string());
+            }
+
+            let ts = timestamp.unwrap_or(fallback_timestamp);
+            stats.last_timestamp = Some(ts);
+
+            let order_id = order_id
+                .unwrap_or_else(|| format!("evt-market-{}-{}", expected_symbol, Uuid::new_v4()));
+            let order = MarketOrder::new(order_id, asset.clone(), side, quantity, ts, tif);
+            book.add_market_order(order);
+            stats.applied_events += 1;
+            Ok(())
+        }
+        RawEvent::Cancel {
+            order_id,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            stats.last_timestamp = timestamp.or(stats.last_timestamp);
+            if book.cancel_order(&order_id) {
+                stats.applied_events += 1;
+                Ok(())
+            } else {
+                Err("Cancel event referenced unknown order".to_string())
+            }
+        }
+        RawEvent::Modify {
+            order_id,
+            new_price,
+            new_quantity,
+            timestamp,
+            symbol,
+        } => {
+            enforce_symbol(expected_symbol, symbol.as_deref())?;
+            let price = Decimal::from_str(&new_price)
+                .map_err(|_| "Invalid price in modify event".to_string())?;
+            if price <= Decimal::ZERO {
+                return Err("Price must be positive in modify event".to_string());
+            }
+            let quantity = Decimal::from_str(&new_quantity)
+                .map_err(|_| "Invalid quantity in modify event".to_string())?;
+            if quantity <= Decimal::ZERO {
+                return Err("Quantity must be positive in modify event".to_string());
+            }
+            stats.last_timestamp = timestamp.or(stats.last_timestamp);
+            if book.modify_order(&order_id, price, quantity) {
+                stats.applied_events += 1;
+                Ok(())
+            } else {
+                Err("Modify event failed to update order".to_string())
+            }
+        }
+    }
+}
+
+fn enforce_symbol(expected: &str, provided: Option<&str>) -> Result<(), String> {
+    if let Some(actual) = provided {
+        if !actual.trim().eq_ignore_ascii_case(expected) {
+            return Err("Event symbol did not match target symbol".to_string());
+        }
+    }
+    Ok(())
 }

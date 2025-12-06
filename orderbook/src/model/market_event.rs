@@ -1,7 +1,7 @@
 // src/model/market_event.rs
 
-use std::fmt::Debug;
 use rust_decimal::Decimal;
+use std::fmt::Debug;
 
 use super::{Side, TimeInForce};
 

@@ -3,16 +3,12 @@
 use std::fs::File;
 use std::io::{self, Write};
 
-use super::{Trade, OrderBookSnapshot};
+use super::{OrderBookSnapshot, Trade};
 
 /// Interface to export trades and book history.
 pub trait DataExporter: Send + Sync {
     fn export_trades(&self, trades: &[Trade], path: &str) -> io::Result<()>;
-    fn export_book_history(
-        &self,
-        history: &[OrderBookSnapshot],
-        path: &str,
-    ) -> io::Result<()>;
+    fn export_book_history(&self, history: &[OrderBookSnapshot], path: &str) -> io::Result<()>;
 }
 
 /// Simple CSV exporter implementation.
@@ -51,17 +47,10 @@ impl DataExporter for CsvDataExporter {
         Ok(())
     }
 
-    fn export_book_history(
-        &self,
-        history: &[OrderBookSnapshot],
-        path: &str,
-    ) -> io::Result<()> {
+    fn export_book_history(&self, history: &[OrderBookSnapshot], path: &str) -> io::Result<()> {
         let mut file = File::create(path)?;
         // Very simple summary: one row per snapshot
-        writeln!(
-            file,
-            "timestamp,symbol,bid_levels,ask_levels,recent_trades"
-        )?;
+        writeln!(file, "timestamp,symbol,bid_levels,ask_levels,recent_trades")?;
 
         for snap in history {
             writeln!(

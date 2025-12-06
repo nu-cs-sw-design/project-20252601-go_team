@@ -5,8 +5,8 @@ use std::fmt::Debug;
 // Side of an Order
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
-    BUY, 
-    SELL
+    BUY,
+    SELL,
 }
 
 // Time in force Policy for an order
@@ -14,14 +14,14 @@ pub enum Side {
 pub enum TimeInForce {
     GTC, // Good Till Cancelled
     IOC, // Immediate Or Cancel
-    FOK // Fill Or Kill
+    FOK, // Fill Or Kill
 }
 
 // Any asset that can be traded - Thread Safe
 pub trait TradableAsset: Debug + Send + Sync {
     fn ticker(&self) -> &str;
-    fn name(&self)-> &str;
-    fn description(&self)-> &str;
+    fn name(&self) -> &str;
+    fn description(&self) -> &str;
 }
 
 // A stock asset
@@ -47,9 +47,9 @@ pub struct Crypto {
 impl Stock {
     pub fn new<T: Into<String>>(ticker: T, name: T, description: T) -> Self {
         Self {
-            ticker : ticker.into(),
-            name : name.into(),
-            description : description.into()
+            ticker: ticker.into(),
+            name: name.into(),
+            description: description.into(),
         }
     }
 }
@@ -71,9 +71,9 @@ impl TradableAsset for Stock {
 impl Crypto {
     pub fn new<T: Into<String>>(ticker: T, name: T, description: T) -> Self {
         Self {
-            ticker : ticker.into(),
-            name : name.into(),
-            description : description.into()
+            ticker: ticker.into(),
+            name: name.into(),
+            description: description.into(),
         }
     }
 }

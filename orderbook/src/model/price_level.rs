@@ -1,8 +1,8 @@
 // src/model/price_level.rs
 
-use std::collections::VecDeque;
-use rust_decimal::Decimal;
 use super::{LimitOrder, Order, Trade};
+use rust_decimal::Decimal;
+use std::collections::VecDeque;
 
 // A single price level in the order book
 // Holds a FIFO queue of limit orders at the same price
@@ -41,11 +41,7 @@ impl PriceLevel {
 
     // Remove an order by ID, if present -> return true if removed
     pub fn remove_order(&mut self, order_id: &str) -> bool {
-        if let Some(pos) = self
-            .orders
-            .iter()
-            .position(|o| o.order_id() == order_id)
-        {
+        if let Some(pos) = self.orders.iter().position(|o| o.order_id() == order_id) {
             let removed = self.orders.remove(pos).unwrap();
             self.total_volume -= removed.remaining_quantity();
             true
@@ -56,11 +52,7 @@ impl PriceLevel {
 
     // Take (remove and return) an order by ID, if present
     pub fn take_order(&mut self, order_id: &str) -> Option<LimitOrder> {
-        if let Some(pos) = self
-            .orders
-            .iter()
-            .position(|o| o.order_id() == order_id)
-        {
+        if let Some(pos) = self.orders.iter().position(|o| o.order_id() == order_id) {
             let removed = self.orders.remove(pos).unwrap();
             self.total_volume -= removed.remaining_quantity();
             Some(removed)
