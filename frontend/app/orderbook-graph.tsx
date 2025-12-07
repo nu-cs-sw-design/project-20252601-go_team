@@ -1,53 +1,82 @@
 "use client"
 
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts"
+import { useMemo } from "react"
+import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts"
 
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart"
+// A minimal, reusable depth chart for order books.
+// Price on X-axis, volume on Y-axis. Two series: bids and asks.
 
-const chartData = [
-  { month: "January", desktop: 186, mobile: 80 },
-  { month: "February", desktop: 305, mobile: 200 },
-  { month: "March", desktop: 237, mobile: 120 },
-  { month: "April", desktop: 73, mobile: 190 },
-  { month: "May", desktop: 209, mobile: 130 },
-  { month: "June", desktop: 214, mobile: 140 },
-]
+export type DepthPoint = {
+  price: number
+  volume: number
+}
 
-const chartConfig = {
-  desktop: {
-    label: "Desktop",
-    color: "#2563eb",
-  },
-  mobile: {
-    label: "Mobile",
-    color: "#60a5fa",
-  },
-} satisfies ChartConfig
+export type OrderbookDepthProps = {
+  bids: DepthPoint[]
+  asks: DepthPoint[]
+  className?: string
+}
 
-export function OrderbookChart() {
+// Normalize and sort input for a clean chart. Keep it simple.
+function useDepthData(bids: DepthPoint[], asks: DepthPoint[]) {
+  return useMemo(() => {
+    const round3 = (x: number) => Number(x.toFixed(3))
+
+    const sortedBids = [...bids]
+      .filter((b) => Number.isFinite(b.price) && Number.isFinite(b.volume))
+      .map((b) => ({ price: round3(b.price), volume: round3(b.volume) }))
+      .sort((a, b) => a.price - b.price)
+
+    const sortedAsks = [...asks]
+      .filter((a) => Number.isFinite(a.price) && Number.isFinite(a.volume))
+      .map((a) => ({ price: round3(a.price), volume: round3(a.volume) }))
+      .sort((a, b) => a.price - b.price)
+
+    const byPrice = new Map<number, { price: number; bid?: number; ask?: number }>()
+
+    for (const b of sortedBids) {
+      const existing = byPrice.get(b.price) || { price: b.price }
+      existing.bid = round3((existing.bid || 0) + b.volume)
+      byPrice.set(b.price, existing)
+    }
+
+    for (const a of sortedAsks) {
+      const existing = byPrice.get(a.price) || { price: a.price }
+      existing.ask = round3((existing.ask || 0) + a.volume)
+      byPrice.set(a.price, existing)
+    }
+
+    const data = Array.from(byPrice.values()).sort((a, b) => a.price - b.price)
+    return data
+  }, [bids, asks])
+}
+
+
+export function OrderbookDepthChart({ bids, asks, className }: OrderbookDepthProps) {
+  const data = useDepthData(bids, asks)
+
   return (
-    <ChartContainer config={chartConfig} className="min-h-[200px] w-full">
-      <BarChart accessibilityLayer data={chartData}>
-        <CartesianGrid vertical={false} />
+    <div className={className || "min-h-[200px] w-full"}>
+      <BarChart width={600} height={300} data={data}>
+        <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
-          dataKey="month"
+          dataKey="price"
           tickLine={false}
-          tickMargin={10}
           axisLine={false}
-          tickFormatter={(value) => value.slice(0, 3)}
+          label={{ value: "Price", position: "insideBottom", offset: -5 }}
         />
-        <ChartTooltip content={<ChartTooltipContent />} />
-        <ChartLegend content={<ChartLegendContent />} />
-        <Bar dataKey="desktop" fill="var(--color-desktop)" radius={4} />
-        <Bar dataKey="mobile" fill="var(--color-mobile)" radius={4} />
+        <YAxis
+          tickLine={false}
+          axisLine={false}
+          label={{ value: "Volume", angle: -90, position: "insideLeft" }}
+        />
+        <Tooltip formatter={(value: number, name) => [value, name]} />
+        <Bar dataKey="bid" fill="#22c55e" />
+        <Bar dataKey="ask" fill="#ef4444" />
       </BarChart>
-    </ChartContainer>
+    </div>
   )
 }
+
+// Backwards-compatible export name used elsewhere.
+export const OrderbookChart = OrderbookDepthChart
