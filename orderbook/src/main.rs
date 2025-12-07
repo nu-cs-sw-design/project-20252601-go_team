@@ -16,6 +16,7 @@ mod api_test;
 pub mod controller;
 
 use actix_web::{web, App, HttpServer };
+use actix_cors::Cors;
 
 use controller::controller::{
     place_limit_order, place_market_order, cancel_order, modify_order,
@@ -67,6 +68,12 @@ fn print_top_of_book(book: &OrderBook, label: &str) {
 async fn run_server() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
+            .wrap(
+                Cors::default()
+                    .allow_any_origin()
+                    .allow_any_method()
+                    .allow_any_header()
+            )
             .route("/health", web::post().to(health))
             .route("/place_limit_order", web::post().to(place_limit_order))
             .route("/place_market_order", web::post().to(place_market_order))
@@ -237,5 +244,6 @@ async fn main() -> std::io::Result<()> {
         snapshot.asks.len(),
         snapshot.recent_trades.len()
     );
-    run_server().await
+        run_server().await?;
+        Ok(())
 }
